@@ -100,6 +100,24 @@ def cmd_inspect(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_ask(args: argparse.Namespace) -> int:
+    """단발 질의 → 라우팅·검색·근거 기반 답변. (OpenAI+Chroma+Claude 키 필요)"""
+    from sejong_rag.agent.factory import build_orchestrator
+
+    orch = build_orchestrator()
+    res = orch.run(args.query)
+
+    label = {"clarify": "되묻기", "answer": "답변", "abstain": "정보 없음"}.get(res.kind, res.kind)
+    print(f"[의도] {res.intent.value}  [유형] {label}")
+    print()
+    print(res.text)
+    if res.sources:
+        print("\n[출처]")
+        for i, c in enumerate(res.sources, 1):
+            print(f"  [{i}] {c.source_url}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     # 콘솔 인코딩이 UTF-8이 아니어도(예: Windows cp949) 한글 출력이 깨지거나
     # 죽지 않도록 안전하게 설정.
@@ -124,6 +142,10 @@ def main(argv: list[str] | None = None) -> int:
     p_insp.add_argument("--from-store", action="store_true", help="크롤 대신 SQLite 활성 문서에서 생성")
     p_insp.add_argument("--out", help="출력 경로 (기본: data/inspect_bigyogwa.md)")
     p_insp.set_defaults(func=cmd_inspect)
+
+    p_ask = sub.add_parser("ask", help="질문하기 (라우팅·검색·근거 기반 답변; API 키 필요)")
+    p_ask.add_argument("--query", required=True, help="질문 문장")
+    p_ask.set_defaults(func=cmd_ask)
 
     args = parser.parse_args(argv)
     return args.func(args)

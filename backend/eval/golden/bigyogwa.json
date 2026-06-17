@@ -1,0 +1,10 @@
+[
+  {"category": "temporal", "query": "지금 신청 가능한 비교과 알려줘", "expected": "현재 신청기간이 열린 프로그램만 나와야 함"},
+  {"category": "temporal", "query": "오늘 신청할 수 있는 프로그램 있어?", "expected": "마감된 프로그램은 제외"},
+  {"category": "semantic", "query": "멘토링 프로그램 추천해줘", "expected": "멘토링 관련 프로그램이 상위에"},
+  {"category": "exact-name", "query": "신입생 멘토링 신청 기간 언제야?", "expected": "신청기간을 정확히 인용"},
+  {"category": "eligibility", "query": "내 학년이 신청 가능한 비교과 알려줘", "expected": "학년을 되물어야 함(clarify)"},
+  {"category": "multi-constraint", "query": "지금 신청 가능한 학습 관련 비교과 알려줘", "expected": "신청중 + 학습역량 주제"},
+  {"category": "semantic", "query": "마일리지 많이 주는 프로그램 뭐 있어?", "expected": "마일리지 높은 프로그램"},
+  {"category": "smalltalk", "query": "안녕하세요", "expected": "안내 메시지(abstain)"}
+]
