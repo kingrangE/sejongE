@@ -1,0 +1,28 @@
+# secrets
+.env
+*.env
+
+# 수집·생성 데이터 (재현 가능하므로 버전관리 제외)
+backend/data/
+data/
+*.sqlite
+*.sqlite3
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# node (frontend, Phase 4)
+node_modules/
+.next/
+dist/
+
+# editor / OS
+.DS_Store
+.idea/
+.vscode/

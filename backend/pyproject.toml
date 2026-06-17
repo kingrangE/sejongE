@@ -1,0 +1,66 @@
+[project]
+name = "sejong-rag"
+version = "0.1.0"
+description = "세종대학교 통합 정보 RAG 챗봇 백엔드"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    # core
+    "pydantic>=2.6",
+    "pydantic-settings>=2.2",
+    "python-dateutil>=2.9",
+    # ingest / ETL
+    "httpx>=0.27",
+    "beautifulsoup4>=4.12",
+    "lxml>=5.2",
+    "charset-normalizer>=3.3",
+    "playwright>=1.44",
+    "apscheduler>=3.10",
+    # index / retrieve
+    "chromadb>=0.5",
+    "openai>=1.30",
+    # llm / agent
+    "anthropic>=0.34",
+    # content extraction
+    "pandas>=2.2",
+    # api
+    "fastapi>=0.111",
+    "uvicorn[standard]>=0.30",
+    "sse-starlette>=2.1",
+]
+
+[project.optional-dependencies]
+# v2 하이브리드 검색에서만 도입
+hybrid = [
+    "kiwipiepy>=0.17",
+    "rank-bm25>=0.2.2",
+]
+# 이미지 OCR 저비용 폴백 (기본은 Claude 비전)
+ocr = [
+    "pytesseract>=0.3.10",
+    "Pillow>=10.3",
+]
+dev = [
+    "pytest>=8.2",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.4",
+]
+
+[project.scripts]
+sejong-rag = "sejong_rag.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/sejong_rag"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
