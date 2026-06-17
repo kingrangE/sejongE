@@ -30,6 +30,8 @@ PYTHONPATH=src pytest -q
 PYTHONPATH=src python -m sejong_rag.cli crawl --site bigyogwa --dry-run
 # 실제 적재 (OpenAI 임베딩 + Chroma, .env 키 필요)
 PYTHONPATH=src python -m sejong_rag.cli crawl --site bigyogwa
+PYTHONPATH=src python -m sejong_rag.cli crawl --site calendar   # 학사일정
+PYTHONPATH=src python -m sejong_rag.cli crawl --site labs       # 연구실(AI융합대학)
 ```
 
 ## 수집 점검 (사이트와 대조)
@@ -65,8 +67,10 @@ src/sejong_rag/
   models.py        # LabDoc/CalendarEvent/BigyogwaProgram, ConversationProfile, ContentUnit, Candidate
   time_utils.py    # KST, epoch-day, 한국어 상대날짜 해석("이번 주" 등)
   ingest/
-    http_fetcher.py     # httpx 정적 fetch + 원본 캐시 + 정중한 지연
+    http_fetcher.py     # httpx 정적 fetch/post + 원본 캐시 + 정중한 지연
     sites/bigyogwa.py   # 비교과 목록 파서 + crawl 러너
+    sites/calendar.py   # 학사일정(공개 페이지) 파서
+    sites/labs.py       # 연구실/교수(공개 API) 파서 — AI융합대학
   normalize/
     html_clean.py  # 인코딩 감지(cp949/euc-kr)·NFC·본문 텍스트
     dedup.py       # 안정 id·content_hash (멱등/변경감지)
@@ -98,9 +102,9 @@ eval/
 - [x] **Phase 1** — 비교과 ETL 한 줄기(Extract→Transform→Load, 멱등) + 메타필터 + 상태 재계산. 라이브 검증.
   - ⚠️ 알려진 제약: 두드림은 JS SPA라 **정적 fetch는 첫 묶음(~8건)만** 수집. **전체 목록 페이지네이션·상세 본문·자격(학년/전공) 정밀추출은 Playwright 후속** 필요(현재 자격은 전체로 가정). 콘텐츠 유형별(table/image) 추출기도 상세 단계에서 추가.
 - [x] **Phase 2** — Vector RAG + 클라리피케이션. 의도 라우팅·하드필터·되묻기·근거 기반 생성·abstention. 결정론 부분 테스트 완료(LLM 생성은 키 필요).
-- [ ] Phase 3 — 학사일정 / 연구실 확장
+- [x] **Phase 3** — 학사일정(공개 페이지)·연구실(공개 API, AI융합대학 12개 학과 190명) 수집. 세 도메인 모두 동일 ETL·검색 골격 재사용.
 - [ ] Phase 4 — FastAPI + Next.js 통합 UI
 - [ ] Phase 5 — 지속 운영 + (조건부) 하이브리드
 
 ## 테스트 현황
-53개 통과: 시간유틸·모델·SQLite 멱등·비교과 파서(실제 HTML 픽스처)·필터·ETL 멱등/변경감지/소프트삭제·라우터·프로필/되묻기·VectorRetriever·오케스트레이터(가짜 LLM).
+63개 통과: 시간유틸·모델·SQLite 멱등·세 파서(비교과/학사일정/연구실, 실제 픽스처)·필터·ETL 멱등/변경감지/소프트삭제·라우터·프로필/되묻기·VectorRetriever·오케스트레이터(가짜 LLM).
