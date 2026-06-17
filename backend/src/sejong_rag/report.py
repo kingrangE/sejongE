@@ -6,7 +6,7 @@ API 키 없이 동작(파싱 결과 또는 SQLite 활성 문서 기반). 실제 
 
 from __future__ import annotations
 
-from sejong_rag.models import BigyogwaProgram, ProgramStatus, compute_status
+from sejong_rag.models import BigyogwaProgram, CalendarEvent, ProgramStatus, compute_status
 from sejong_rag.time_utils import epoch_day, today_kst
 
 _STATUS_KO = {
@@ -74,4 +74,23 @@ def render_bigyogwa_markdown(programs: list[BigyogwaProgram], source: str = "par
         lines.append(p.embedding_text)
         lines.append("```")
         lines.append("")
+    return "\n".join(lines)
+
+
+def render_calendar_markdown(events: list[CalendarEvent], source: str = "parse") -> str:
+    today = today_kst()
+    evs = sorted(events, key=lambda e: (e.start_epoch_day or 0))
+    lines: list[str] = []
+    lines.append("# 학사일정 수집 점검 리포트")
+    lines.append("")
+    lines.append(f"- 소스: `{source}`")
+    lines.append(f"- 기준일: **{today}**")
+    lines.append(f"- 수집 건수: **{len(evs)}건**")
+    lines.append("")
+    lines.append("| # | 기간 | 일정 | 분류 | 학기 |")
+    lines.append("|--:|---|---|---|---|")
+    for i, e in enumerate(evs, 1):
+        period = f"{e.start_date}" if e.start_date == e.end_date else f"{e.start_date} ~ {e.end_date}"
+        title = (e.title or "—").replace("|", "丨")
+        lines.append(f"| {i} | {period} | {title} | {e.category} | {e.semester} |")
     return "\n".join(lines)
