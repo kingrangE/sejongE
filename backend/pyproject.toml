@@ -16,11 +16,9 @@ dependencies = [
     "charset-normalizer>=3.3",
     "playwright>=1.44",
     "apscheduler>=3.10",
-    # index / retrieve
+    # index / retrieve / llm (임베딩·생성 모두 OpenAI)
     "chromadb>=0.5",
     "openai>=1.30",
-    # llm / agent
-    "anthropic>=0.34",
     # content extraction
     "pandas>=2.2",
     # api
@@ -35,10 +33,14 @@ hybrid = [
     "kiwipiepy>=0.17",
     "rank-bm25>=0.2.2",
 ]
-# 이미지 OCR 저비용 폴백 (기본은 Claude 비전)
+# 이미지 OCR 저비용 폴백 (기본은 OpenAI 비전 모델)
 ocr = [
     "pytesseract>=0.3.10",
     "Pillow>=10.3",
+]
+# Claude를 LLM으로 선택 사용할 때만
+claude = [
+    "anthropic>=0.34",
 ]
 dev = [
     "pytest>=8.2",

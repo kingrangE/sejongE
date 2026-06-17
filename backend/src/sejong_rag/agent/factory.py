@@ -6,7 +6,7 @@ CLI와 평가 스크립트가 공유한다. 구성요소는 지연 초기화라 
 
 from __future__ import annotations
 
-from sejong_rag.agent.llm import ClaudeClient
+from sejong_rag.agent.llm import OpenAIChatClient
 from sejong_rag.agent.orchestrator import Orchestrator
 from sejong_rag.config import Settings, get_settings
 from sejong_rag.index.embedder import OpenAIEmbedder
@@ -15,6 +15,7 @@ from sejong_rag.retrieve.vector import VectorRetriever
 
 
 def build_orchestrator(settings: Settings | None = None) -> Orchestrator:
+    """기본 조립: 임베딩·생성 모두 OpenAI (Chroma 색인)."""
     settings = settings or get_settings()
     retriever = VectorRetriever(OpenAIEmbedder(settings), ChromaVectorStore(settings))
-    return Orchestrator(retriever, ClaudeClient(settings))
+    return Orchestrator(retriever, OpenAIChatClient(settings))

@@ -33,7 +33,7 @@
         │ 주기 크롤                                    ▼                   ▼
                                               ┌────────────────┐   ┌──────────────┐
                                               │ Agent           │   │ Next.js/React│
-                                              │ (Claude, 되묻기)│   │  채팅 UI      │
+                                              │ (OpenAI, 되묻기)│   │  채팅 UI      │
                                               └────────────────┘   └──────────────┘
 ```
 
@@ -117,7 +117,7 @@
 |---|---|---|
 | 임베딩 | OpenAI `text-embedding-3-large` | 한국어 품질, 차원 축소 옵션. 변경분만 호출해 비용 통제 |
 | 벡터DB | Chroma | 무설치 임베디드, 메타데이터 필터 일급 지원. 추후 Qdrant 교체 가능하게 래핑 |
-| LLM / 비전 | Claude (Opus 4.8) | 한국어, tool use(되묻기·검색 호출), 이미지 텍스트 추출 |
+| LLM / 비전 | OpenAI (gpt-4o-mini, 환경변수로 교체) | 임베딩과 동일 키로 답변 생성·이미지 텍스트 추출. LLMClient 인터페이스로 Claude 등 교체 가능 |
 | 크롤 | httpx + BeautifulSoup / Playwright | 정적 우선, JS 사이트는 헤드리스 브라우저로 폴백 |
 | 스케줄 | APScheduler | 순수 파이썬, 도메인별 주기 크롤 |
 | 저장 | SQLite | 진실 원천. 변경감지·소프트삭제·실행 이력 |
@@ -184,7 +184,7 @@ python -m sejong_rag.cli inspect --site bigyogwa
 # 2) 실제 색인 적재 (OpenAI 임베딩 + Chroma; .env 키 필요)
 python -m sejong_rag.cli crawl --site bigyogwa
 
-# 3) 질문하기 (OpenAI + Chroma + Claude; .env 키 필요)
+# 3) 질문하기 (OpenAI + Chroma; OPENAI_API_KEY 필요)
 python -m sejong_rag.cli ask --query "지금 신청 가능한 비교과 알려줘"
 
 # 테스트

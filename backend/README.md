@@ -7,7 +7,7 @@
 
 ## 요구사항
 - Python 3.11+
-- `OPENAI_API_KEY`(임베딩), `ANTHROPIC_API_KEY`(LLM/비전) — `.env`
+- `OPENAI_API_KEY` — 임베딩 + 답변 생성 모두 OpenAI (`.env`). Anthropic은 선택.
 
 ## 설치
 ```bash
@@ -43,7 +43,7 @@ PYTHONPATH=src python -m sejong_rag.cli inspect --site bigyogwa --from-store
 리포트에는 프로그램별 신청기간·상태(오늘 기준 접수중/예정/마감)·모집현황·마일리지·**원본 링크**·임베딩 텍스트가 표로 정리되어, 실제 사이트와 항목을 1:1 대조할 수 있다.
 
 ## 질의 (Vector RAG + 되묻기)
-적재된 색인에 대해 질문 (OpenAI + Chroma + Claude 키 필요):
+적재된 색인에 대해 질문 (OpenAI + Chroma, `OPENAI_API_KEY` 필요):
 ```bash
 PYTHONPATH=src python -m sejong_rag.cli ask --query "지금 신청 가능한 비교과 알려줘"
 PYTHONPATH=src python -m sejong_rag.cli ask --query "연구실 추천해줘"   # 관심사 되묻기
@@ -85,7 +85,7 @@ src/sejong_rag/
     orchestrator.py # 라우팅→되묻기→검색→근거 기반 생성
     profile.py      # 프로필 추출 + 되묻기 게이트
     prompts.py      # 시스템 프롬프트(anti-hallucination·인용) + 컨텍스트 포매팅
-    llm.py          # Claude 래퍼(지연 import) + LLMClient 인터페이스
+    llm.py          # OpenAI 챗 래퍼(기본) + LLMClient 인터페이스(Claude 선택)
     factory.py      # 실제 의존성으로 Orchestrator 조립
   report.py · cli.py   # 검수 리포트 / CLI(crawl·inspect·ask)
 eval/

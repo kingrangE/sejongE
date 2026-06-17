@@ -23,11 +23,11 @@ class Settings(BaseSettings):
     openai_api_key: str = Field(default="", alias="OPENAI_API_KEY")
     anthropic_api_key: str = Field(default="", alias="ANTHROPIC_API_KEY")
 
-    # --- 모델 ---
+    # --- 모델 (기본: OpenAI) ---
     embedding_model: str = Field(default="text-embedding-3-large", alias="EMBEDDING_MODEL")
     embedding_dim: int = Field(default=3072, alias="EMBEDDING_DIM")
-    llm_model: str = Field(default="claude-opus-4-8", alias="LLM_MODEL")
-    llm_model_cheap: str = Field(default="claude-haiku-4-5", alias="LLM_MODEL_CHEAP")
+    llm_model: str = Field(default="gpt-4o-mini", alias="LLM_MODEL")
+    llm_model_cheap: str = Field(default="gpt-4o-mini", alias="LLM_MODEL_CHEAP")
 
     # --- 저장 경로 ---
     data_dir: Path = Field(default=BACKEND_ROOT / "data", alias="DATA_DIR")
