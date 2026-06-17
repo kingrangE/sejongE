@@ -6,13 +6,15 @@ SDK는 지연 import → 키/패키지 없이도 모듈 로드 가능.
 
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Iterator, Protocol
 
 from sejong_rag.config import Settings, get_settings
 
 
 class LLMClient(Protocol):
     def generate(self, system: str, user: str) -> str: ...
+
+    def stream(self, system: str, user: str) -> Iterator[str]: ...
 
 
 class OpenAIChatClient:
@@ -51,6 +53,29 @@ class OpenAIChatClient:
         except Exception:
             resp = self.client.chat.completions.create(model=self.settings.llm_model, messages=messages)
         return (resp.choices[0].message.content or "").strip()
+
+    def stream(self, system: str, user: str) -> Iterator[str]:
+        messages = [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ]
+        kwargs: dict = {"model": self.settings.llm_model, "messages": messages,
+                        "max_completion_tokens": self.max_tokens, "stream": True}
+        if self.temperature is not None:
+            kwargs["temperature"] = self.temperature
+        try:
+            stream = self.client.chat.completions.create(**kwargs)
+        except Exception:
+            stream = self.client.chat.completions.create(
+                model=self.settings.llm_model, messages=messages, stream=True
+            )
+        for chunk in stream:
+            if not chunk.choices:
+                continue
+            delta = chunk.choices[0].delta
+            text = getattr(delta, "content", None)
+            if text:
+                yield text
 
 
 class ClaudeClient:

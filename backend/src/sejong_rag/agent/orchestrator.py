@@ -14,6 +14,7 @@ retriever/llm은 주입식 → 가짜 구현으로 결정론적 테스트 가능
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Iterator
 
 from sejong_rag.agent import prompts
 from sejong_rag.agent.llm import LLMClient
@@ -21,6 +22,18 @@ from sejong_rag.agent.profile import extract_updates, needs_clarification
 from sejong_rag.models import Candidate, ConversationProfile, Intent
 from sejong_rag.retrieve.retriever import Retriever
 from sejong_rag.retrieve.router import route
+
+
+def serialize_source(c: Candidate) -> dict:
+    """UI 출처 카드용 직렬화."""
+    snippet = c.text.split("\n", 1)[0][:80] if c.text else ""
+    return {
+        "url": c.source_url,
+        "doc_type": c.doc_type.value,
+        "score": round(c.score, 3),
+        "snippet": snippet,
+        "original_ref": c.original_ref,
+    }
 
 _ABSTAIN = {
     Intent.BIGYOGWA: "조건에 맞는 비교과 프로그램을 찾지 못했습니다.",
@@ -66,3 +79,44 @@ class Orchestrator:
             prompts.SYSTEM_PROMPT, prompts.build_user_message(query, candidates)
         )
         return AnswerResult("answer", answer, routed.intent, profile, sources=candidates)
+
+    def run_stream(
+        self, query: str, profile: ConversationProfile | None = None
+    ) -> Iterator[tuple[str, object]]:
+        """SSE용 스트리밍. (event, data) 튜플을 순서대로 방출한다.
+
+        events: meta → (clarify|abstain|(sources, delta*)) → profile → done
+        clarify/abstain은 LLM을 호출하지 않아 키 없이도 동작한다.
+        """
+        profile = extract_updates(query, profile or ConversationProfile())
+        routed = route(query, profile)
+        yield ("meta", {"intent": routed.intent.value})
+
+        if routed.intent is Intent.SMALLTALK:
+            yield ("abstain", {"text": _ABSTAIN[Intent.SMALLTALK]})
+            yield ("profile", profile.model_dump())
+            yield ("done", {})
+            return
+
+        clar = needs_clarification(routed.intent, query, profile)
+        if clar is not None:
+            profile = profile.model_copy(update={"asked_fields": [*profile.asked_fields, clar.field]})
+            yield ("clarify", {"text": clar.question, "field": clar.field})
+            yield ("profile", profile.model_dump())
+            yield ("done", {})
+            return
+
+        candidates = self.retriever.search(query, routed.filters, top_k=self.top_k)
+        if not candidates:
+            yield ("abstain", {"text": _ABSTAIN[routed.intent]})
+            yield ("profile", profile.model_dump())
+            yield ("done", {})
+            return
+
+        yield ("sources", [serialize_source(c) for c in candidates])
+        for token in self.llm.stream(
+            prompts.SYSTEM_PROMPT, prompts.build_user_message(query, candidates)
+        ):
+            yield ("delta", token)
+        yield ("profile", profile.model_dump())
+        yield ("done", {})
