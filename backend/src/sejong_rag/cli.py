@@ -20,19 +20,23 @@ def _run_id() -> str:
 
 def _crawl_docs(site: str, fetcher, crawled_at: str, args: argparse.Namespace):
     """사이트별 크롤→파싱. 도메인 문서 리스트 반환."""
-    from sejong_rag.ingest.sites import bigyogwa, calendar
+    from sejong_rag.ingest.sites import bigyogwa, calendar, labs
 
     if site == "bigyogwa":
         return bigyogwa.crawl(fetcher, crawled_at=crawled_at, max_pages=args.pages)
     if site == "calendar":
         year = args.year or now_kst().year
         return calendar.crawl(fetcher, crawled_at=crawled_at, year=year)
+    if site == "labs":
+        return labs.crawl(fetcher, crawled_at=crawled_at)
     raise ValueError(f"지원하지 않는 site: {site}")
 
 
 def _doc_line(d) -> str:
     if getattr(d, "program_name", None):
         return f"  - {d.id} | {d.program_name[:50]} | 신청 {d.apply_start}~{d.apply_end}"
+    if getattr(d, "professor_name", None):
+        return f"  - {d.id} | {d.professor_name} | {d.department} | {', '.join(d.research_areas[:3])}"
     return f"  - {d.id} | {d.title[:50]} | {d.start_date}~{d.end_date} | {d.category}"
 
 
@@ -79,13 +83,17 @@ def cmd_crawl(args: argparse.Namespace) -> int:
 
 def cmd_inspect(args: argparse.Namespace) -> int:
     """수집 점검 리포트(Markdown) 생성. 실제 사이트와 대조용. API 키 불필요."""
-    from sejong_rag.models import BigyogwaProgram, CalendarEvent
-    from sejong_rag.report import render_bigyogwa_markdown, render_calendar_markdown
+    from sejong_rag.models import BigyogwaProgram, CalendarEvent, LabDoc
+    from sejong_rag.report import (
+        render_bigyogwa_markdown,
+        render_calendar_markdown,
+        render_labs_markdown,
+    )
 
     settings = get_settings()
     settings.ensure_dirs()
     site = args.site
-    model = {"bigyogwa": BigyogwaProgram, "calendar": CalendarEvent}[site]
+    model = {"bigyogwa": BigyogwaProgram, "calendar": CalendarEvent, "labs": LabDoc}[site]
 
     if args.from_store:
         from sejong_rag.index.store import DocumentStore
@@ -103,8 +111,10 @@ def cmd_inspect(args: argparse.Namespace) -> int:
 
     if site == "bigyogwa":
         md = render_bigyogwa_markdown(docs, source=source)
-    else:
+    elif site == "calendar":
         md = render_calendar_markdown(docs, source=source)
+    else:
+        md = render_labs_markdown(docs, source=source)
     out_path = args.out or str(settings.data_dir / f"inspect_{site}.md")
     with open(out_path, "w", encoding="utf-8") as f:
         f.write(md)
@@ -144,14 +154,14 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_crawl = sub.add_parser("crawl", help="사이트를 크롤링해 색인에 적재")
-    p_crawl.add_argument("--site", required=True, choices=["bigyogwa", "calendar"])
+    p_crawl.add_argument("--site", required=True, choices=["bigyogwa", "calendar", "labs"])
     p_crawl.add_argument("--pages", type=int, default=1)
     p_crawl.add_argument("--year", type=int, default=None, help="학사일정 연도(기본: 올해)")
     p_crawl.add_argument("--dry-run", action="store_true", help="적재 없이 파싱 결과만 출력(임베딩 호출 안 함)")
     p_crawl.set_defaults(func=cmd_crawl)
 
     p_insp = sub.add_parser("inspect", help="수집 점검 리포트(Markdown) 생성 — 사이트와 대조용")
-    p_insp.add_argument("--site", required=True, choices=["bigyogwa", "calendar"])
+    p_insp.add_argument("--site", required=True, choices=["bigyogwa", "calendar", "labs"])
     p_insp.add_argument("--pages", type=int, default=1)
     p_insp.add_argument("--year", type=int, default=None, help="학사일정 연도(기본: 올해)")
     p_insp.add_argument("--from-store", action="store_true", help="크롤 대신 SQLite 활성 문서에서 생성")

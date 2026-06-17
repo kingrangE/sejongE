@@ -44,6 +44,16 @@ class HttpFetcher:
         time.sleep(self.settings.crawl_min_delay_sec)
         return decode_bytes(raw, resp.headers.get("content-type"))
 
+    def post(self, url: str, data: dict, *, site: str, referer: str | None = None) -> str:
+        """폼 POST(예: 학과 교수 목록 API). 정중한 지연 후 텍스트 반환."""
+        headers = {"X-Requested-With": "XMLHttpRequest"}
+        if referer:
+            headers["Referer"] = referer
+        resp = self._client.post(url, data=data, headers=headers)
+        resp.raise_for_status()
+        time.sleep(self.settings.crawl_min_delay_sec)
+        return decode_bytes(resp.content, resp.headers.get("content-type"))
+
     def _cache_raw(self, site: str, name: str, raw: bytes) -> None:
         d = self.settings.raw_dir / site
         d.mkdir(parents=True, exist_ok=True)

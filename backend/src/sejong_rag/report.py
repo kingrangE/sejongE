@@ -6,7 +6,7 @@ API 키 없이 동작(파싱 결과 또는 SQLite 활성 문서 기반). 실제 
 
 from __future__ import annotations
 
-from sejong_rag.models import BigyogwaProgram, CalendarEvent, ProgramStatus, compute_status
+from sejong_rag.models import BigyogwaProgram, CalendarEvent, LabDoc, ProgramStatus, compute_status
 from sejong_rag.time_utils import epoch_day, today_kst
 
 _STATUS_KO = {
@@ -93,4 +93,27 @@ def render_calendar_markdown(events: list[CalendarEvent], source: str = "parse")
         period = f"{e.start_date}" if e.start_date == e.end_date else f"{e.start_date} ~ {e.end_date}"
         title = (e.title or "—").replace("|", "丨")
         lines.append(f"| {i} | {period} | {title} | {e.category} | {e.semester} |")
+    return "\n".join(lines)
+
+
+def render_labs_markdown(labs: list[LabDoc], source: str = "parse") -> str:
+    by_dept: dict[str, list[LabDoc]] = {}
+    for d in labs:
+        by_dept.setdefault(d.department or "(학과미상)", []).append(d)
+    lines: list[str] = []
+    lines.append("# 연구실/교수 수집 점검 리포트")
+    lines.append("")
+    lines.append(f"- 소스: `{source}`")
+    lines.append(f"- 단과대: {labs[0].college if labs else '—'}")
+    lines.append(f"- 학과 수: **{len(by_dept)}**, 교수 수: **{len(labs)}**")
+    lines.append("")
+    lines.append("| # | 교수 | 학과 | 연구분야 | 연구실 홈 |")
+    lines.append("|--:|---|---|---|---|")
+    i = 0
+    for dept, members in by_dept.items():
+        for d in members:
+            i += 1
+            areas = ", ".join(d.research_areas[:4]).replace("|", "丨") or "—"
+            home = f"[링크]({d.homepage_url})" if d.homepage_url else "—"
+            lines.append(f"| {i} | {d.professor_name} | {dept} | {areas} | {home} |")
     return "\n".join(lines)
