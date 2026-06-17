@@ -1,0 +1,133 @@
+"""명령행 인터페이스.
+
+예:
+  python -m sejong_rag.cli crawl --site bigyogwa
+  python -m sejong_rag.cli crawl --site bigyogwa --pages 1 --dry-run
+"""
+
+from __future__ import annotations
+
+import argparse
+import sys
+
+from sejong_rag.config import get_settings
+from sejong_rag.time_utils import now_kst
+
+
+def _run_id() -> str:
+    return now_kst().strftime("run-%Y%m%d-%H%M%S")
+
+
+def cmd_crawl(args: argparse.Namespace) -> int:
+    if args.site != "bigyogwa":
+        print(f"[crawl] 아직 지원하지 않는 site: {args.site} (현재 bigyogwa만)", file=sys.stderr)
+        return 2
+
+    from sejong_rag.ingest.http_fetcher import HttpFetcher
+    from sejong_rag.ingest.sites import bigyogwa
+
+    settings = get_settings()
+    settings.ensure_dirs()
+    crawled_at = now_kst().isoformat()
+
+    with HttpFetcher(settings) as fetcher:
+        docs = bigyogwa.crawl(fetcher, crawled_at=crawled_at, max_pages=args.pages)
+    print(f"[crawl] 파싱된 프로그램: {len(docs)}건")
+
+    if args.dry_run:
+        for d in docs:
+            print(f"  - {d.id} | {d.program_name[:50]} | 신청 {d.apply_start}~{d.apply_end}")
+        return 0
+
+    # 실제 적재: OpenAI 임베딩 + Chroma + SQLite
+    from sejong_rag.index.build_index import run_etl
+    from sejong_rag.index.embedder import OpenAIEmbedder
+    from sejong_rag.index.store import DocumentStore
+    from sejong_rag.index.vectorstore import ChromaVectorStore
+
+    store = DocumentStore(settings.sqlite_path)
+    stats = run_etl(
+        docs,
+        store=store,
+        embedder=OpenAIEmbedder(settings),
+        vectorstore=ChromaVectorStore(settings),
+        site="bigyogwa",
+        run_id=_run_id(),
+        started_at=crawled_at,
+        finished_at=now_kst().isoformat(),
+    )
+    store.close()
+    print(
+        f"[crawl] 적재 완료 — new={stats.new} changed={stats.changed} "
+        f"unchanged={stats.unchanged} deleted={stats.deleted} embedded={stats.embedded}"
+    )
+    return 0
+
+
+def cmd_inspect(args: argparse.Namespace) -> int:
+    """수집 점검 리포트(Markdown) 생성. 실제 사이트와 대조용. API 키 불필요."""
+    if args.site != "bigyogwa":
+        print(f"[inspect] 아직 지원하지 않는 site: {args.site}", file=sys.stderr)
+        return 2
+
+    from sejong_rag.models import BigyogwaProgram
+    from sejong_rag.report import render_bigyogwa_markdown
+
+    settings = get_settings()
+    settings.ensure_dirs()
+
+    if args.from_store:
+        from sejong_rag.index.store import DocumentStore
+
+        store = DocumentStore(settings.sqlite_path)
+        programs = [BigyogwaProgram(**p) for p in store.active_payloads("bigyogwa")]
+        store.close()
+        source = "sqlite(active)"
+    else:
+        from sejong_rag.ingest.http_fetcher import HttpFetcher
+        from sejong_rag.ingest.sites import bigyogwa
+
+        with HttpFetcher(settings) as fetcher:
+            programs = bigyogwa.crawl(fetcher, crawled_at=now_kst().isoformat(), max_pages=args.pages)
+        source = "live parse"
+
+    md = render_bigyogwa_markdown(programs, source=source)
+    out_path = args.out or str(settings.data_dir / "inspect_bigyogwa.md")
+    with open(out_path, "w", encoding="utf-8") as f:
+        f.write(md)
+    print(f"[inspect] {len(programs)}건 → {out_path}")
+    print(f"[inspect] 브라우저/에디터로 열어 실제 사이트와 대조하세요.")
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    # 콘솔 인코딩이 UTF-8이 아니어도(예: Windows cp949) 한글 출력이 깨지거나
+    # 죽지 않도록 안전하게 설정.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[attr-defined]
+        except Exception:
+            pass
+
+    parser = argparse.ArgumentParser(prog="sejong-rag")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    p_crawl = sub.add_parser("crawl", help="사이트를 크롤링해 색인에 적재")
+    p_crawl.add_argument("--site", required=True, choices=["bigyogwa"])
+    p_crawl.add_argument("--pages", type=int, default=1)
+    p_crawl.add_argument("--dry-run", action="store_true", help="적재 없이 파싱 결과만 출력(임베딩 호출 안 함)")
+    p_crawl.set_defaults(func=cmd_crawl)
+
+    p_insp = sub.add_parser("inspect", help="수집 점검 리포트(Markdown) 생성 — 사이트와 대조용")
+    p_insp.add_argument("--site", required=True, choices=["bigyogwa"])
+    p_insp.add_argument("--pages", type=int, default=1)
+    p_insp.add_argument("--from-store", action="store_true", help="크롤 대신 SQLite 활성 문서에서 생성")
+    p_insp.add_argument("--out", help="출력 경로 (기본: data/inspect_bigyogwa.md)")
+    p_insp.set_defaults(func=cmd_inspect)
+
+    args = parser.parse_args(argv)
+    return args.func(args)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
