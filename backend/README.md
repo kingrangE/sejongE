@@ -60,6 +60,14 @@ PYTHONPATH=src python eval/dump_answers.py        # → data/eval_report.md
 ```
 질문·의도·답변·검색 출처가 표로 나오며, 사람이 ○/△/✕로 직접 채점한다.
 
+## API 서버 (FastAPI + SSE)
+```bash
+PYTHONPATH=src uvicorn sejong_rag.api.main:app --port 8000
+# POST /chat {message, session_id?} → text/event-stream
+#   session → meta → (clarify | abstain | sources + delta*) → profile → done
+```
+프론트엔드(Next.js)는 `../frontend` 참고.
+
 ## 구조
 ```
 src/sejong_rag/
@@ -86,11 +94,16 @@ src/sejong_rag/
     filters.py     # RetrievalFilter → Chroma where + 메타데이터 투영
     router.py      # 의도 분류 + 시간/자격 필터 추출(결정론)
   agent/
-    orchestrator.py # 라우팅→되묻기→검색→근거 기반 생성
+    orchestrator.py # 라우팅→되묻기→검색→근거 기반 생성(+ SSE용 run_stream)
     profile.py      # 프로필 추출 + 되묻기 게이트
     prompts.py      # 시스템 프롬프트(anti-hallucination·인용) + 컨텍스트 포매팅
-    llm.py          # OpenAI 챗 래퍼(기본) + LLMClient 인터페이스(Claude 선택)
+    llm.py          # OpenAI 챗 래퍼(generate/stream) + LLMClient 인터페이스
     factory.py      # 실제 의존성으로 Orchestrator 조립
+  api/
+    main.py         # FastAPI 앱(+CORS, /health)
+    routes_chat.py  # POST /chat — SSE 스트리밍
+    session.py      # session_id별 프로필 보관(메모리)
+    deps.py · schemas.py
   report.py · cli.py   # 검수 리포트 / CLI(crawl·inspect·ask)
 eval/
   golden/bigyogwa.json # 수동 채점용 골든 질의
@@ -103,8 +116,8 @@ eval/
   - ⚠️ 알려진 제약: 두드림은 JS SPA라 **정적 fetch는 첫 묶음(~8건)만** 수집. **전체 목록 페이지네이션·상세 본문·자격(학년/전공) 정밀추출은 Playwright 후속** 필요(현재 자격은 전체로 가정). 콘텐츠 유형별(table/image) 추출기도 상세 단계에서 추가.
 - [x] **Phase 2** — Vector RAG + 클라리피케이션. 의도 라우팅·하드필터·되묻기·근거 기반 생성·abstention. 결정론 부분 테스트 완료(LLM 생성은 키 필요).
 - [x] **Phase 3** — 학사일정(공개 페이지)·연구실(공개 API, AI융합대학 12개 학과 190명) 수집. 세 도메인 모두 동일 ETL·검색 골격 재사용.
-- [ ] Phase 4 — FastAPI + Next.js 통합 UI
+- [x] **Phase 4** — FastAPI `/chat` SSE 스트리밍 + 세션, Next.js/React 챗 UI(스트리밍·출처 카드·프로필 패널).
 - [ ] Phase 5 — 지속 운영 + (조건부) 하이브리드
 
 ## 테스트 현황
-63개 통과: 시간유틸·모델·SQLite 멱등·세 파서(비교과/학사일정/연구실, 실제 픽스처)·필터·ETL 멱등/변경감지/소프트삭제·라우터·프로필/되묻기·VectorRetriever·오케스트레이터(가짜 LLM).
+69개 통과: 위 항목 + FastAPI `/chat`(SSE 이벤트 순서·세션 지속·프로필 추출).
