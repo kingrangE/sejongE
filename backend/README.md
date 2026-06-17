@@ -42,6 +42,22 @@ PYTHONPATH=src python -m sejong_rag.cli inspect --site bigyogwa --from-store
 ```
 리포트에는 프로그램별 신청기간·상태(오늘 기준 접수중/예정/마감)·모집현황·마일리지·**원본 링크**·임베딩 텍스트가 표로 정리되어, 실제 사이트와 항목을 1:1 대조할 수 있다.
 
+## 질의 (Vector RAG + 되묻기)
+적재된 색인에 대해 질문 (OpenAI + Chroma + Claude 키 필요):
+```bash
+PYTHONPATH=src python -m sejong_rag.cli ask --query "지금 신청 가능한 비교과 알려줘"
+PYTHONPATH=src python -m sejong_rag.cli ask --query "연구실 추천해줘"   # 관심사 되묻기
+```
+- 질의 의도를 분류하고(비교과/학사일정/연구실), "지금"·"이번 주" 같은 표현과 학년/전공을 **하드 필터**로 변환해 검색한 뒤, 검색 자료만 근거로 출처를 인용해 답한다.
+- 정보를 못 찾으면 환각 대신 "없음"으로 답하고, 모호하면 한 가지만 되묻는다.
+
+## 수동 채점 (평가)
+골든 질의를 실행해 채점용 Markdown 리포트 생성 (키 필요):
+```bash
+PYTHONPATH=src python eval/dump_answers.py        # → data/eval_report.md
+```
+질문·의도·답변·검색 출처가 표로 나오며, 사람이 ○/△/✕로 직접 채점한다.
+
 ## 구조
 ```
 src/sejong_rag/
@@ -62,18 +78,29 @@ src/sejong_rag/
     vectorstore.py # Chroma 래퍼 (지연 import)
   retrieve/
     retriever.py   # Retriever 인터페이스 + RetrievalFilter (Vector↔Hybrid 교체 지점)
+    vector.py      # VectorRetriever(v1) — OpenAI dense + 하드필터
     filters.py     # RetrievalFilter → Chroma where + 메타데이터 투영
-  cli.py           # crawl 명령
+    router.py      # 의도 분류 + 시간/자격 필터 추출(결정론)
+  agent/
+    orchestrator.py # 라우팅→되묻기→검색→근거 기반 생성
+    profile.py      # 프로필 추출 + 되묻기 게이트
+    prompts.py      # 시스템 프롬프트(anti-hallucination·인용) + 컨텍스트 포매팅
+    llm.py          # Claude 래퍼(지연 import) + LLMClient 인터페이스
+    factory.py      # 실제 의존성으로 Orchestrator 조립
+  report.py · cli.py   # 검수 리포트 / CLI(crawl·inspect·ask)
+eval/
+  golden/bigyogwa.json # 수동 채점용 골든 질의
+  dump_answers.py      # 채점 리포트 생성
 ```
 
 ## 단계
 - [x] **Phase 0** — 스캐폴드·핵심 모델·시간 유틸·SQLite 저장소·인터페이스
 - [x] **Phase 1** — 비교과 ETL 한 줄기(Extract→Transform→Load, 멱등) + 메타필터 + 상태 재계산. 라이브 검증.
   - ⚠️ 알려진 제약: 두드림은 JS SPA라 **정적 fetch는 첫 묶음(~8건)만** 수집. **전체 목록 페이지네이션·상세 본문·자격(학년/전공) 정밀추출은 Playwright 후속** 필요(현재 자격은 전체로 가정). 콘텐츠 유형별(table/image) 추출기도 상세 단계에서 추가.
-- [ ] Phase 2 — Vector RAG + 클라리피케이션
+- [x] **Phase 2** — Vector RAG + 클라리피케이션. 의도 라우팅·하드필터·되묻기·근거 기반 생성·abstention. 결정론 부분 테스트 완료(LLM 생성은 키 필요).
 - [ ] Phase 3 — 학사일정 / 연구실 확장
 - [ ] Phase 4 — FastAPI + Next.js 통합 UI
 - [ ] Phase 5 — 지속 운영 + (조건부) 하이브리드
 
 ## 테스트 현황
-30개 통과: 시간유틸·모델·SQLite 멱등·비교과 파서(실제 HTML 픽스처)·필터·ETL 멱등/변경감지/소프트삭제.
+53개 통과: 시간유틸·모델·SQLite 멱등·비교과 파서(실제 HTML 픽스처)·필터·ETL 멱등/변경감지/소프트삭제·라우터·프로필/되묻기·VectorRetriever·오케스트레이터(가짜 LLM).

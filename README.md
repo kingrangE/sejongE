@@ -150,18 +150,22 @@
 
 ## 현재 진행 상황
 
-**Phase 0 · 1 완료** (테스트 30개 통과).
+**Phase 0 · 1 · 2 완료** (테스트 53개 통과).
 
 동작하는 것:
 - 비교과(두드림) 수집 → 정규화 → 멱등 적재까지의 ETL 한 줄기. 실제 사이트로 검증.
 - SQLite 진실 원천(변경분류·소프트삭제·실행 이력), Chroma·OpenAI 어댑터.
-- 시간/자격 하드 필터, 한국어 상대 날짜 해석("이번 주", "지금" 등).
-- `crawl` / `inspect` CLI — 수집과 검수.
+- **질의 처리**: 의도 분류(비교과/학사일정/연구실) → "지금"·"이번 주"·학년/전공을
+  하드 필터로 변환 → 벡터 검색 → 검색 자료만 근거로 출처 인용 답변. 정보 없으면 환각 대신
+  "없음"으로 답하고, 모호하면 한 가지만 되묻는다.
+- `crawl` / `inspect` / `ask` CLI + 수동 채점 덤프(`eval/dump_answers.py`).
 
 정직한 제약(다음 단계에서 해소):
 - 두드림이 JS SPA라 현재 정적 수집은 첫 묶음(약 7~8건)만 가져온다. 전체 목록·상세 본문·
   자격(학년/전공) 정밀 추출은 Playwright 도입 후 채워진다(현재 자격은 "전체"로 가정).
-- 학사일정·연구실 수집, 검색·에이전트·API·프론트엔드는 로드맵 단계.
+- LLM 답변 생성·임베딩 호출은 API 키가 있어야 동작(결정론 로직은 키 없이 테스트됨).
+- 학사일정·연구실 수집, API 서버·프론트엔드는 로드맵 단계. 검색은 v1 Vector이며,
+  수동 채점 결과에 따라 동일 인터페이스로 하이브리드(v2) 전환.
 
 자세한 실행/구조는 [`backend/README.md`](backend/README.md) 참고.
 
@@ -179,6 +183,9 @@ python -m sejong_rag.cli inspect --site bigyogwa
 
 # 2) 실제 색인 적재 (OpenAI 임베딩 + Chroma; .env 키 필요)
 python -m sejong_rag.cli crawl --site bigyogwa
+
+# 3) 질문하기 (OpenAI + Chroma + Claude; .env 키 필요)
+python -m sejong_rag.cli ask --query "지금 신청 가능한 비교과 알려줘"
 
 # 테스트
 pytest -q
@@ -198,9 +205,11 @@ pytest -q
 │  │  ├─ ingest/        # 크롤러(httpx) · 사이트별 파서(bigyogwa)
 │  │  ├─ normalize/     # 인코딩·정규화 · 변경감지(dedup) · 청킹
 │  │  ├─ index/         # SQLite 저장소 · Chroma · OpenAI 임베딩 · 멱등 ETL
-│  │  ├─ retrieve/      # Retriever 인터페이스 · 시간/자격 필터
-│  │  ├─ report.py · cli.py                       # 검수 리포트 / CLI
+│  │  ├─ retrieve/      # Retriever 인터페이스 · VectorRetriever · 시간/자격 필터 · 라우터
+│  │  ├─ agent/         # 오케스트레이터 · 되묻기/프로필 · 프롬프트 · LLM 래퍼
+│  │  ├─ report.py · cli.py                       # 검수 리포트 / CLI(crawl·inspect·ask)
 │  │  └─ (api/ — Phase 4)
-│  └─ tests/            # 파서·ETL 멱등성·필터·시간유틸 등 30개
+│  ├─ eval/             # 골든 질의 + 수동 채점 덤프
+│  └─ tests/            # 파서·ETL·필터·라우터·오케스트레이터 등 53개
 └─ frontend/                     # Next.js + React (Phase 4)
 ```
