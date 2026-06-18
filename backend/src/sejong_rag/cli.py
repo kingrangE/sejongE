@@ -152,7 +152,8 @@ def main(argv: list[str] | None = None) -> int:
 
     p_crawl = sub.add_parser("crawl", help="사이트를 크롤링해 색인에 적재")
     p_crawl.add_argument("--site", required=True, choices=["bigyogwa", "calendar", "labs", "all"])
-    p_crawl.add_argument("--pages", type=int, default=1)
+    p_crawl.add_argument("--pages", type=int, default=None,
+                         help="비교과 수집 페이지 수(미지정=새 항목 없을 때까지 전체)")
     p_crawl.add_argument("--year", type=int, default=None, help="학사일정 연도(기본: 올해)")
     p_crawl.add_argument("--dry-run", action="store_true", help="적재 없이 파싱 결과만 출력(임베딩 호출 안 함)")
     p_crawl.set_defaults(func=cmd_crawl)
