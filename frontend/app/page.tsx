@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import SourceCard from "@/components/SourceCard";
 import Markdown from "@/components/Markdown";
-import { streamChat, type Profile, type Source } from "@/lib/api";
+import { streamChat, type Profile, type Source, type Turn } from "@/lib/api";
 
 interface Message {
   id: number;
@@ -69,6 +69,12 @@ export default function Page() {
     setInput("");
     setBusy(true);
 
+    // 직전까지의 완료된 대화를 최근 8턴만 동봉(멀티턴 맥락)
+    const history: Turn[] = messages
+      .filter((m) => m.text.trim())
+      .map((m) => ({ role: m.role, content: m.text }))
+      .slice(-8);
+
     const userId = nextId.current++;
     const botId = nextId.current++;
     setMessages((prev) => [
@@ -78,7 +84,7 @@ export default function Page() {
     ]);
 
     try {
-      await streamChat(q, profile, {
+      await streamChat(q, profile, history, {
         onMeta: (intent) => patch(botId, (m) => ({ ...m, intent })),
         onDelta: (tok) => patch(botId, (m) => ({ ...m, text: m.text + tok })),
         onClarify: (t) => patch(botId, (m) => ({ ...m, intent: "clarify", text: t })),

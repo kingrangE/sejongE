@@ -19,6 +19,11 @@ export interface Profile {
   asked_fields: string[];
 }
 
+export interface Turn {
+  role: "user" | "assistant";
+  content: string;
+}
+
 export interface ChatHandlers {
   onMeta?: (intent: string) => void;
   onDelta?: (token: string) => void;
@@ -32,13 +37,14 @@ export interface ChatHandlers {
 export async function streamChat(
   message: string,
   profile: Profile,
+  history: Turn[],
   handlers: ChatHandlers,
 ): Promise<void> {
-  // 프로필은 클라이언트가 보관(localStorage)하고 매 요청에 동봉 → 백엔드 무상태.
+  // 프로필·대화기록 모두 클라이언트가 보관하고 매 요청에 동봉 → 백엔드 무상태.
   const res = await fetch(`${API_BASE}/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message, profile }),
+    body: JSON.stringify({ message, profile, history }),
   });
   if (!res.ok || !res.body) {
     throw new Error(`chat 요청 실패: ${res.status}`);

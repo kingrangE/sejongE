@@ -104,6 +104,17 @@ def test_lab_query_augmented_with_interests():
     assert "로보틱스" in fr.last_query
 
 
+def test_followup_reference_uses_prior_question():
+    fr = FakeRetriever([_cand()])
+    history = [
+        {"role": "user", "content": "지금 신청 가능한 비교과 알려줘"},
+        {"role": "assistant", "content": "Smart 영상제 등이 있어요"},
+    ]
+    Orchestrator(fr, FakeLLM()).run("그 중 첫 번째 신청기간 다시 알려줘", ConversationProfile(), history)
+    # 참조성 후속 질문이라 직전 사용자 질문이 검색에 보강됨
+    assert "비교과" in fr.last_query
+
+
 def test_no_interest_no_augment():
     fr = FakeRetriever([_cand()])
     Orchestrator(fr, FakeLLM()).run("이번 주 시험 일정", ConversationProfile(interests=["AI"]))

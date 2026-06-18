@@ -31,9 +31,10 @@ def chat(
     orch: Orchestrator = Depends(get_orchestrator),
 ) -> StreamingResponse:
     profile = req.profile or ConversationProfile()
+    history = [t.model_dump() for t in req.history]
 
     def event_stream():
-        for event, data in orch.run_stream(req.message, profile):
+        for event, data in orch.run_stream(req.message, profile, history):
             yield _sse(event, data)
 
     return StreamingResponse(

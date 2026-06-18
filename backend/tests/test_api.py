@@ -100,6 +100,19 @@ def test_profile_extracted_from_message_merges():
     assert prof["grade"] == 3 and prof["major"] == "컴퓨터공학과"
 
 
+def test_chat_accepts_history():
+    body = {
+        "message": "그거 더 자세히 알려줘",
+        "history": [
+            {"role": "user", "content": "비교과 뭐 있어"},
+            {"role": "assistant", "content": "X 프로그램이 있어요"},
+        ],
+    }
+    r = _client([_cand()]).post("/chat", json=body)
+    assert r.status_code == 200
+    assert any(e == "done" for e, _ in _parse_sse(r.text))
+
+
 def test_no_profile_defaults_empty():
     events = _parse_sse(_client([_cand()]).post("/chat", json={"message": "안녕?"}).text)
     prof = next(d for e, d in events if e == "profile")

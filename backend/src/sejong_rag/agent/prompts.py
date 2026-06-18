@@ -46,10 +46,29 @@ def _profile_block(profile: ConversationProfile | None) -> str:
     )
 
 
+def _history_block(history: list[dict] | None, max_turns: int = 6, max_chars: int = 400) -> str:
+    if not history:
+        return ""
+    lines = ["이전 대화(참고용 — 사용자가 '그거/방금/위에서' 등으로 가리킬 수 있음):"]
+    for t in history[-max_turns:]:
+        content = (t.get("content") or "").strip().replace("\n", " ")
+        if not content:
+            continue
+        who = "사용자" if t.get("role") == "user" else "도우미"
+        lines.append(f"{who}: {content[:max_chars]}")
+    if len(lines) == 1:
+        return ""
+    return "\n".join(lines) + "\n\n"
+
+
 def build_user_message(
-    query: str, candidates: list[Candidate], profile: ConversationProfile | None = None
+    query: str,
+    candidates: list[Candidate],
+    profile: ConversationProfile | None = None,
+    history: list[dict] | None = None,
 ) -> str:
     return (
+        f"{_history_block(history)}"
         f"{_profile_block(profile)}"
         f"검색 자료:\n{format_context(candidates)}\n\n"
         f"학생 질문: {query}\n\n"
