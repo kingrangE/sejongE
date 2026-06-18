@@ -26,3 +26,14 @@ dist/
 .DS_Store
 .idea/
 .vscode/
+
+# Claude Code 로컬 설정 — 번들 스킬/폰트는 제외하고, 직접 만든 설정만 추적
+.claude/*
+!.claude/settings.json
+!.claude/hooks/
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/commit/
+!.claude/skills/portfolio-doc/
+!.claude/skills/project-readme/
+.claude/settings.local.json

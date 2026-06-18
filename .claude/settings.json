@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "TodoWrite",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"C:/Users/K30017/Desktop/skills_repo/.claude/hooks/portfolio_on_todo.py\""
+          }
+        ]
+      }
+    ]
+  }
+}
