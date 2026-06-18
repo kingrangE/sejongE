@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from sejong_rag.models import Candidate
+from sejong_rag.models import Candidate, ConversationProfile
 
 SYSTEM_PROMPT = """당신은 세종대학교 학생을 돕는 정보 안내 챗봇입니다.
 
@@ -27,8 +27,30 @@ def format_context(candidates: list[Candidate]) -> str:
     return "\n\n".join(blocks)
 
 
-def build_user_message(query: str, candidates: list[Candidate]) -> str:
+def _profile_block(profile: ConversationProfile | None) -> str:
+    if profile is None:
+        return ""
+    bits = []
+    if profile.grade:
+        bits.append(f"학년 {profile.grade}")
+    if profile.major:
+        bits.append(f"전공 {profile.major}")
+    if profile.interests:
+        bits.append("관심사 " + ", ".join(profile.interests))
+    if not bits:
+        return ""
     return (
+        "사용자 정보: " + " / ".join(bits) + "\n"
+        "(이 정보로 우선순위·맞춤 설명을 더하되, 프로그램·연구실의 사실 자체는 반드시 검색 자료에 근거하세요. "
+        "관심사가 있으면 추가 질문 없이 그 관심사에 부합하는 항목을 우선 추천하세요.)\n\n"
+    )
+
+
+def build_user_message(
+    query: str, candidates: list[Candidate], profile: ConversationProfile | None = None
+) -> str:
+    return (
+        f"{_profile_block(profile)}"
         f"검색 자료:\n{format_context(candidates)}\n\n"
         f"학생 질문: {query}\n\n"
         f"위 검색 자료만 근거로 답하고, 사용한 자료를 [번호]로 인용하세요."

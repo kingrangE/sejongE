@@ -45,6 +45,19 @@ def profile_answer(query: str, profile: ConversationProfile) -> str:
     return "현재 설정된 프로필이에요.\n\n- " + "\n- ".join(lines)
 
 
+def augment_query(query: str, profile: ConversationProfile, intent: Intent) -> str:
+    """관심사를 검색 질의에 보강한다.
+
+    "그 관심사 기반 추천"처럼 질문에 구체 주제가 없을 때, 저장된 관심사를 임베딩 질의에 더해
+    검색이 실제로 관심 분야를 향하게 한다. (연구실 의도이거나 '관심'을 언급한 경우)
+    """
+    if not profile.interests:
+        return query
+    if "관심" in query or intent is Intent.LAB:
+        return f"{query} {' '.join(profile.interests)}"
+    return query
+
+
 def serialize_source(c: Candidate) -> dict:
     """UI 출처 카드용 직렬화."""
     snippet = c.text.split("\n", 1)[0][:80] if c.text else ""
@@ -97,12 +110,13 @@ class Orchestrator:
             profile = profile.model_copy(update={"asked_fields": [*profile.asked_fields, clar.field]})
             return AnswerResult("clarify", clar.question, routed.intent, profile)
 
-        candidates = self.retriever.search(query, routed.filters, top_k=self.top_k)
+        search_query = augment_query(query, profile, routed.intent)
+        candidates = self.retriever.search(search_query, routed.filters, top_k=self.top_k)
         if not candidates:
             return AnswerResult("abstain", _ABSTAIN[routed.intent], routed.intent, profile)
 
         answer = self.llm.generate(
-            prompts.SYSTEM_PROMPT, prompts.build_user_message(query, candidates)
+            prompts.SYSTEM_PROMPT, prompts.build_user_message(query, candidates, profile)
         )
         return AnswerResult("answer", answer, routed.intent, profile, sources=candidates)
 
@@ -138,7 +152,8 @@ class Orchestrator:
             yield ("done", {})
             return
 
-        candidates = self.retriever.search(query, routed.filters, top_k=self.top_k)
+        search_query = augment_query(query, profile, routed.intent)
+        candidates = self.retriever.search(search_query, routed.filters, top_k=self.top_k)
         if not candidates:
             yield ("abstain", {"text": _ABSTAIN[routed.intent]})
             yield ("profile", profile.model_dump())
@@ -147,7 +162,7 @@ class Orchestrator:
 
         yield ("sources", [serialize_source(c) for c in candidates])
         for token in self.llm.stream(
-            prompts.SYSTEM_PROMPT, prompts.build_user_message(query, candidates)
+            prompts.SYSTEM_PROMPT, prompts.build_user_message(query, candidates, profile)
         ):
             yield ("delta", token)
         yield ("profile", profile.model_dump())

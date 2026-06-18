@@ -9,9 +9,11 @@ class FakeRetriever(Retriever):
     def __init__(self, results):
         self.results = results
         self.last_filter = None
+        self.last_query = None
 
     def search(self, query, filters: RetrievalFilter | None = None, top_k: int = 8):
         self.last_filter = filters
+        self.last_query = query
         return self.results
 
 
@@ -86,6 +88,27 @@ def test_profile_question_when_unset():
     res = Orchestrator(FakeRetriever([]), FakeLLM()).run("내 관심사가 뭐야?", ConversationProfile())
     assert res.kind == "answer" and res.intent is Intent.PROFILE
     assert "설정" in res.text  # "설정되어 있지 않아요" 안내
+
+
+def test_interest_augments_search_query():
+    fr = FakeRetriever([_cand()])
+    orch = Orchestrator(fr, FakeLLM())
+    orch.run("그 관심사를 기반으로 추천해줘", ConversationProfile(interests=["AI", "LLM", "C++"]))
+    # 관심사 값이 실제 검색 질의에 보강됨
+    assert "AI" in fr.last_query and "LLM" in fr.last_query and "C++" in fr.last_query
+
+
+def test_lab_query_augmented_with_interests():
+    fr = FakeRetriever([_cand()])
+    Orchestrator(fr, FakeLLM()).run("연구실 추천해줘", ConversationProfile(interests=["로보틱스"]))
+    assert "로보틱스" in fr.last_query
+
+
+def test_no_interest_no_augment():
+    fr = FakeRetriever([_cand()])
+    Orchestrator(fr, FakeLLM()).run("이번 주 시험 일정", ConversationProfile(interests=["AI"]))
+    # 캘린더 등 관심사와 무관한 질의는 보강하지 않음
+    assert "AI" not in fr.last_query
 
 
 def test_open_filter_passed_to_retriever():
