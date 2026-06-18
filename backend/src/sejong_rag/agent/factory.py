@@ -11,11 +11,50 @@ from sejong_rag.agent.orchestrator import Orchestrator
 from sejong_rag.config import Settings, get_settings
 from sejong_rag.index.embedder import OpenAIEmbedder
 from sejong_rag.index.vectorstore import ChromaVectorStore
+from sejong_rag.retrieve.filters import doc_to_metadata
+from sejong_rag.retrieve.retriever import Retriever
 from sejong_rag.retrieve.vector import VectorRetriever
 
 
-def build_orchestrator(settings: Settings | None = None) -> Orchestrator:
-    """기본 조립: 임베딩·생성 모두 OpenAI (Chroma 색인)."""
+def load_sparse_corpus(settings: Settings) -> list[dict]:
+    """SQLite 활성 문서 → BM25 코퍼스(문서별 텍스트 + 메타데이터)."""
+    from sejong_rag.index.store import DocumentStore
+    from sejong_rag.models import BigyogwaProgram, CalendarEvent, LabDoc
+
+    models = {"bigyogwa": BigyogwaProgram, "calendar": CalendarEvent, "labs": LabDoc}
+    store = DocumentStore(settings.sqlite_path)
+    try:
+        corpus = []
+        for site, model in models.items():
+            for payload in store.active_payloads(site):
+                doc = model(**payload)
+                corpus.append({
+                    "id": doc.id,
+                    "text": doc.embedding_text,
+                    "doc_type": doc.doc_type.value,
+                    "source_url": doc.source_url,
+                    "modality": doc.modality.value,
+                    "metadata": doc_to_metadata(doc),
+                })
+        return corpus
+    finally:
+        store.close()
+
+
+def build_retriever(settings: Settings, *, hybrid: bool = False) -> Retriever:
+    dense = VectorRetriever(OpenAIEmbedder(settings), ChromaVectorStore(settings))
+    if not hybrid:
+        return dense
+    # v2: dense + BM25(키위 선택) RRF 융합
+    from sejong_rag.retrieve.bm25 import BM25Retriever
+    from sejong_rag.retrieve.hybrid import HybridRetriever
+    from sejong_rag.retrieve.tokenize import get_tokenizer
+
+    sparse = BM25Retriever(load_sparse_corpus(settings), get_tokenizer())
+    return HybridRetriever(dense, sparse)
+
+
+def build_orchestrator(settings: Settings | None = None, *, hybrid: bool = False) -> Orchestrator:
+    """기본 조립: 임베딩·생성 모두 OpenAI (Chroma 색인). hybrid=True면 v2 검색."""
     settings = settings or get_settings()
-    retriever = VectorRetriever(OpenAIEmbedder(settings), ChromaVectorStore(settings))
-    return Orchestrator(retriever, OpenAIChatClient(settings))
+    return Orchestrator(build_retriever(settings, hybrid=hybrid), OpenAIChatClient(settings))

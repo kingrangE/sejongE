@@ -28,10 +28,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# v2 하이브리드 검색에서만 도입
+# v2 하이브리드 검색의 한국어 형태소 토크나이저(선택). BM25는 순수 파이썬 내장 구현.
 hybrid = [
     "kiwipiepy>=0.17",
-    "rank-bm25>=0.2.2",
 ]
 # 이미지 OCR 저비용 폴백 (기본은 OpenAI 비전 모델)
 ocr = [

@@ -38,6 +38,30 @@ def doc_to_metadata(doc: BaseDoc) -> dict:
     return meta
 
 
+def passes_filter(meta: dict, f: RetrievalFilter | None) -> bool:
+    """to_chroma_where와 동일한 하드 필터를 파이썬에서 평가(BM25 후보 필터링용)."""
+    if f is None:
+        return True
+    if f.doc_type is not None and meta.get("doc_type") != f.doc_type.value:
+        return False
+    if f.only_open and f.as_of_epoch is not None:
+        s, e = meta.get("apply_start_epoch"), meta.get("apply_end_epoch")
+        if s is None or e is None or not (s <= f.as_of_epoch <= e):
+            return False
+    if f.date_lte is not None:
+        s = meta.get("start_epoch_day")
+        if s is None or not (s <= f.date_lte):
+            return False
+    if f.date_gte is not None:
+        e = meta.get("end_epoch_day")
+        if e is None or not (e >= f.date_gte):
+            return False
+    for k, v in f.extra_eq.items():
+        if meta.get(k) != v:
+            return False
+    return True
+
+
 def to_chroma_where(f: RetrievalFilter | None) -> dict | None:
     """RetrievalFilter → Chroma where dict. 조건 없으면 None."""
     if f is None:
