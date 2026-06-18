@@ -1,0 +1,67 @@
+name: CI
+
+# 백엔드(파이썬)와 프론트엔드(Next.js)를 각각 검증한다.
+# - 백엔드: ruff 린트 + pytest (API 키·브라우저 불필요한 결정론 테스트)
+# - 프론트엔드: 타입체크 겸 next build
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+
+# 같은 브랜치에서 연속 푸시 시 이전 실행을 취소해 러너 낭비를 줄인다.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: backend (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+
+      - name: Install (editable + dev extras)
+        run: python -m pip install -e ".[dev]"
+
+      - name: Lint (ruff)
+        run: ruff check .
+
+      - name: Test (pytest)
+        run: pytest -q
+
+  frontend:
+    name: frontend build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install (npm ci)
+        run: npm ci
+
+      - name: Build (next build — 타입체크 포함)
+        run: npm run build
