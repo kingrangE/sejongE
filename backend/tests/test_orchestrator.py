@@ -70,6 +70,24 @@ def test_profile_extracted_from_query():
     assert res.profile.major == "컴퓨터공학과"
 
 
+def test_profile_question_answered_from_profile():
+    llm = FakeLLM()
+    fr = FakeRetriever([_cand()])
+    orch = Orchestrator(fr, llm)
+    res = orch.run("내 관심사가 뭐야?", ConversationProfile(interests=["인공지능", "로봇"]))
+    assert res.kind == "answer"
+    assert res.intent is Intent.PROFILE
+    assert "인공지능" in res.text and "로봇" in res.text
+    assert llm.calls == 0  # 검색/LLM 없이 프로필에서 직접 답
+    assert fr.last_filter is None  # 검색기 호출 안 함
+
+
+def test_profile_question_when_unset():
+    res = Orchestrator(FakeRetriever([]), FakeLLM()).run("내 관심사가 뭐야?", ConversationProfile())
+    assert res.kind == "answer" and res.intent is Intent.PROFILE
+    assert "설정" in res.text  # "설정되어 있지 않아요" 안내
+
+
 def test_open_filter_passed_to_retriever():
     fr = FakeRetriever([_cand()])
     Orchestrator(fr, FakeLLM()).run("지금 신청 가능한 비교과")

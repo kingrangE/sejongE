@@ -27,6 +27,21 @@ _MY_CUE = ("내가", "제가", "나에게", "저에게", "내", "제")
 _GREETING = ("안녕", "반가", "하이", "ㅎㅇ", "고마", "감사", "잘가", "잘 가", "바이",
              "누구야", "누구니", "뭐야 너", "뭐할", "뭐 할", "도움말", "사용법", "테스트")
 
+# 프로필 자체에 대한 질문 (예: "내 관심사가 뭐야?", "내 전공 알려줘", "프로필 보여줘")
+_PROFILE_FIELDS = ("관심", "전공", "학년", "프로필", "내 정보", "내정보")
+_PROFILE_POSSESSIVE = ("내", "제", "나", "저")
+_PROFILE_ASK = ("뭐", "무엇", "알려", "보여", "확인", "뭔", "머")
+
+
+def _is_profile_query(query: str) -> bool:
+    q = query.replace(" ", "")
+    if "프로필" in q:
+        return True
+    has_field = any(f.replace(" ", "") in q for f in _PROFILE_FIELDS)
+    has_poss = any(p in q for p in _PROFILE_POSSESSIVE)
+    asks = any(a in q for a in _PROFILE_ASK) or "?" in query
+    return has_field and has_poss and asks
+
 
 @dataclass
 class Routed:
@@ -50,8 +65,10 @@ def classify_intent(query: str) -> Intent:
     }
     best = max(scores, key=lambda k: scores[k])
     if scores[best] > 0:
-        return best
-    # 도메인 키워드가 없으면: 인사/잡담은 SMALLTALK, 그 외 내용 질문은 전 도메인 통합 검색
+        return best  # 도메인 키워드 우선(예: "내 전공 연구실 뭐있어"는 연구실 검색)
+    if _is_profile_query(query):
+        return Intent.PROFILE
+    # 인사/잡담은 SMALLTALK, 그 외 내용 질문은 전 도메인 통합 검색
     return Intent.SMALLTALK if _is_greeting(query) else Intent.GENERAL
 
 

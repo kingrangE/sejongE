@@ -19,6 +19,15 @@ def test_classify_intent():
     assert classify_intent("고마워!") is Intent.SMALLTALK
 
 
+def test_profile_self_questions():
+    assert classify_intent("내 관심사가 뭐야?") is Intent.PROFILE
+    assert classify_intent("내 전공 알려줘") is Intent.PROFILE
+    assert classify_intent("프로필 보여줘") is Intent.PROFILE
+    # 도메인 키워드가 있으면 검색이 우선(프로필로 가로채지 않음)
+    assert classify_intent("내 전공에 맞는 연구실 뭐 있어?") is Intent.LAB
+    assert classify_intent("내 학년이 신청 가능한 비교과") is Intent.BIGYOGWA
+
+
 def test_route_general_has_no_doc_type():
     r = route("Smart 영상제가 뭐하는거야", as_of=AS_OF)
     assert r.intent is Intent.GENERAL

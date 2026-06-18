@@ -24,6 +24,27 @@ from sejong_rag.retrieve.retriever import Retriever
 from sejong_rag.retrieve.router import route
 
 
+def profile_answer(query: str, profile: ConversationProfile) -> str:
+    """프로필 질문에 저장된 값으로 직접 답한다(검색/LLM 불필요)."""
+    q = query.replace(" ", "")
+    interests = ", ".join(profile.interests) if profile.interests else None
+    if "관심" in q:
+        return (f"현재 설정된 관심사는 **{interests}** 입니다."
+                if interests else "아직 관심사가 설정되어 있지 않아요. 우측 패널에서 입력하거나 알려주세요.")
+    if "전공" in q:
+        return (f"현재 전공은 **{profile.major}** 로 설정되어 있어요."
+                if profile.major else "아직 전공이 설정되어 있지 않아요.")
+    if "학년" in q:
+        return (f"현재 **{profile.grade}학년** 으로 설정되어 있어요."
+                if profile.grade else "아직 학년이 설정되어 있지 않아요.")
+    lines = [
+        f"학년: {profile.grade}학년" if profile.grade else "학년: 미설정",
+        f"전공: {profile.major}" if profile.major else "전공: 미설정",
+        f"관심사: {interests}" if interests else "관심사: 미설정",
+    ]
+    return "현재 설정된 프로필이에요.\n\n- " + "\n- ".join(lines)
+
+
 def serialize_source(c: Candidate) -> dict:
     """UI 출처 카드용 직렬화."""
     snippet = c.text.split("\n", 1)[0][:80] if c.text else ""
@@ -63,6 +84,10 @@ class Orchestrator:
         profile = extract_updates(query, profile or ConversationProfile())
         routed = route(query, profile)
 
+        # 프로필 질문은 저장된 값으로 직접 답(검색/LLM 불필요)
+        if routed.intent is Intent.PROFILE:
+            return AnswerResult("answer", profile_answer(query, profile), routed.intent, profile)
+
         # smalltalk은 검색 없이 안내
         if routed.intent is Intent.SMALLTALK:
             return AnswerResult("abstain", _ABSTAIN[Intent.SMALLTALK], routed.intent, profile)
@@ -92,6 +117,12 @@ class Orchestrator:
         profile = extract_updates(query, profile or ConversationProfile())
         routed = route(query, profile)
         yield ("meta", {"intent": routed.intent.value})
+
+        if routed.intent is Intent.PROFILE:
+            yield ("delta", profile_answer(query, profile))
+            yield ("profile", profile.model_dump())
+            yield ("done", {})
+            return
 
         if routed.intent is Intent.SMALLTALK:
             yield ("abstain", {"text": _ABSTAIN[Intent.SMALLTALK]})

@@ -36,6 +36,7 @@ class Intent(str, Enum):
     CALENDAR = "calendar"
     BIGYOGWA = "bigyogwa"
     GENERAL = "general"  # 도메인 키워드 없는 내용 질문 → 전 도메인 통합 검색
+    PROFILE = "profile"  # 내 학년/전공/관심사 등 프로필 자체에 대한 질문
     CLARIFY = "clarify"
     SMALLTALK = "smalltalk"
 

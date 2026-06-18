@@ -18,6 +18,7 @@ const INTENT_LABEL: Record<string, string> = {
   calendar: "학사일정",
   lab: "연구실",
   general: "통합 검색",
+  profile: "프로필",
   clarify: "확인",
   smalltalk: "일반",
 };
