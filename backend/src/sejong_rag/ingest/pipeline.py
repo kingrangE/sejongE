@@ -14,7 +14,7 @@ from sejong_rag.time_utils import now_kst
 SITES = ["bigyogwa", "calendar", "labs"]
 
 
-def crawl_site(site: str, fetcher, crawled_at: str, *, year: int | None = None, pages: int = 1):
+def crawl_site(site: str, fetcher, crawled_at: str, *, year: int | None = None, pages: int | None = None):
     from sejong_rag.ingest.sites import bigyogwa, calendar, labs
 
     if site == "bigyogwa":
@@ -26,7 +26,7 @@ def crawl_site(site: str, fetcher, crawled_at: str, *, year: int | None = None, 
     raise ValueError(f"지원하지 않는 site: {site}")
 
 
-def ingest_site(site: str, *, settings: Settings | None = None, year: int | None = None, pages: int = 1) -> EtlStats:
+def ingest_site(site: str, *, settings: Settings | None = None, year: int | None = None, pages: int | None = None) -> EtlStats:
     """한 사이트를 크롤해 색인에 멱등 적재한다."""
     settings = settings or get_settings()
     settings.ensure_dirs()
