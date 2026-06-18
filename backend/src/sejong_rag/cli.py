@@ -19,17 +19,10 @@ def _run_id() -> str:
 
 
 def _crawl_docs(site: str, fetcher, crawled_at: str, args: argparse.Namespace):
-    """사이트별 크롤→파싱. 도메인 문서 리스트 반환."""
-    from sejong_rag.ingest.sites import bigyogwa, calendar, labs
+    """사이트별 크롤→파싱(검수/덤프용). 파이프라인 디스패치 재사용."""
+    from sejong_rag.ingest.pipeline import crawl_site
 
-    if site == "bigyogwa":
-        return bigyogwa.crawl(fetcher, crawled_at=crawled_at, max_pages=args.pages)
-    if site == "calendar":
-        year = args.year or now_kst().year
-        return calendar.crawl(fetcher, crawled_at=crawled_at, year=year)
-    if site == "labs":
-        return labs.crawl(fetcher, crawled_at=crawled_at)
-    raise ValueError(f"지원하지 않는 site: {site}")
+    return crawl_site(site, fetcher, crawled_at, year=args.year, pages=args.pages)
 
 
 def _doc_line(d) -> str:
@@ -41,43 +34,47 @@ def _doc_line(d) -> str:
 
 
 def cmd_crawl(args: argparse.Namespace) -> int:
-    from sejong_rag.ingest.http_fetcher import HttpFetcher
+    from sejong_rag.ingest.pipeline import SITES, ingest_site
 
     settings = get_settings()
     settings.ensure_dirs()
-    crawled_at = now_kst().isoformat()
-
-    with HttpFetcher(settings) as fetcher:
-        docs = _crawl_docs(args.site, fetcher, crawled_at, args)
-    print(f"[crawl] 파싱된 문서: {len(docs)}건 (site={args.site})")
+    sites = SITES if args.site == "all" else [args.site]
 
     if args.dry_run:
-        for d in docs:
-            print(_doc_line(d))
+        from sejong_rag.ingest.http_fetcher import HttpFetcher
+
+        crawled_at = now_kst().isoformat()
+        with HttpFetcher(settings) as fetcher:
+            for site in sites:
+                docs = _crawl_docs(site, fetcher, crawled_at, args)
+                print(f"[crawl] 파싱된 문서: {len(docs)}건 (site={site})")
+                for d in docs:
+                    print(_doc_line(d))
         return 0
 
-    # 실제 적재: OpenAI 임베딩 + Chroma + SQLite
-    from sejong_rag.index.build_index import run_etl
-    from sejong_rag.index.embedder import OpenAIEmbedder
-    from sejong_rag.index.store import DocumentStore
-    from sejong_rag.index.vectorstore import ChromaVectorStore
+    for site in sites:
+        stats = ingest_site(site, settings=settings, year=args.year, pages=args.pages)
+        print(
+            f"[crawl] {site} 적재 — new={stats.new} changed={stats.changed} "
+            f"unchanged={stats.unchanged} deleted={stats.deleted} embedded={stats.embedded}"
+        )
+    return 0
 
-    store = DocumentStore(settings.sqlite_path)
-    stats = run_etl(
-        docs,
-        store=store,
-        embedder=OpenAIEmbedder(settings),
-        vectorstore=ChromaVectorStore(settings),
-        site=args.site,
-        run_id=_run_id(),
-        started_at=crawled_at,
-        finished_at=now_kst().isoformat(),
-    )
-    store.close()
-    print(
-        f"[crawl] 적재 완료 — new={stats.new} changed={stats.changed} "
-        f"unchanged={stats.unchanged} deleted={stats.deleted} embedded={stats.embedded}"
-    )
+
+def cmd_schedule(args: argparse.Namespace) -> int:
+    """주기 크롤 스케줄러 시작(블로킹). --run-now로 시작 전 1회 즉시 적재."""
+    from sejong_rag.ingest.scheduler import CADENCE, build_scheduler, run_all_now
+
+    if args.run_now:
+        print("[schedule] 초기 1회 적재 실행…")
+        run_all_now()
+
+    scheduler = build_scheduler()
+    print(f"[schedule] 시작 — 주기: {CADENCE} (Ctrl+C로 종료)")
+    try:
+        scheduler.start()
+    except (KeyboardInterrupt, SystemExit):
+        print("\n[schedule] 종료")
     return 0
 
 
@@ -124,10 +121,10 @@ def cmd_inspect(args: argparse.Namespace) -> int:
 
 
 def cmd_ask(args: argparse.Namespace) -> int:
-    """단발 질의 → 라우팅·검색·근거 기반 답변. (OpenAI+Chroma+Claude 키 필요)"""
+    """단발 질의 → 라우팅·검색·근거 기반 답변. (OpenAI + Chroma 키 필요)"""
     from sejong_rag.agent.factory import build_orchestrator
 
-    orch = build_orchestrator()
+    orch = build_orchestrator(hybrid=args.hybrid)
     res = orch.run(args.query)
 
     label = {"clarify": "되묻기", "answer": "답변", "abstain": "정보 없음"}.get(res.kind, res.kind)
@@ -154,7 +151,7 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_crawl = sub.add_parser("crawl", help="사이트를 크롤링해 색인에 적재")
-    p_crawl.add_argument("--site", required=True, choices=["bigyogwa", "calendar", "labs"])
+    p_crawl.add_argument("--site", required=True, choices=["bigyogwa", "calendar", "labs", "all"])
     p_crawl.add_argument("--pages", type=int, default=1)
     p_crawl.add_argument("--year", type=int, default=None, help="학사일정 연도(기본: 올해)")
     p_crawl.add_argument("--dry-run", action="store_true", help="적재 없이 파싱 결과만 출력(임베딩 호출 안 함)")
@@ -170,7 +167,12 @@ def main(argv: list[str] | None = None) -> int:
 
     p_ask = sub.add_parser("ask", help="질문하기 (라우팅·검색·근거 기반 답변; API 키 필요)")
     p_ask.add_argument("--query", required=True, help="질문 문장")
+    p_ask.add_argument("--hybrid", action="store_true", help="v2 하이브리드 검색(BM25+RRF) 사용")
     p_ask.set_defaults(func=cmd_ask)
+
+    p_sched = sub.add_parser("schedule", help="주기 크롤 스케줄러 시작(지속 운영)")
+    p_sched.add_argument("--run-now", action="store_true", help="시작 전 전체 1회 즉시 적재")
+    p_sched.set_defaults(func=cmd_schedule)
 
     args = parser.parse_args(argv)
     return args.func(args)
