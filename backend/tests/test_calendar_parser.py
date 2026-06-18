@@ -1,6 +1,5 @@
 """학사일정 파서 검증 — 저장된 실제 HTML 픽스처."""
 
-from datetime import date
 from pathlib import Path
 
 import pytest
@@ -23,7 +22,6 @@ def test_parses_events():
 
 def test_date_range_and_single():
     evs = _parse()
-    titles = {e.title: e for e in evs}
     # 범위형
     sugang = next(e for e in evs if "수강신청" in e.title)
     assert sugang.start_date < sugang.end_date
