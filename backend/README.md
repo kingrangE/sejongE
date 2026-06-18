@@ -32,6 +32,14 @@ PYTHONPATH=src python -m sejong_rag.cli crawl --site bigyogwa --dry-run
 PYTHONPATH=src python -m sejong_rag.cli crawl --site bigyogwa
 PYTHONPATH=src python -m sejong_rag.cli crawl --site calendar   # 학사일정
 PYTHONPATH=src python -m sejong_rag.cli crawl --site labs       # 연구실(AI융합대학)
+PYTHONPATH=src python -m sejong_rag.cli crawl --site all        # 세 도메인 일괄
+```
+
+## 지속 운영 (스케줄러)
+도메인별 주기로 자동 크롤(비교과 4h·학사일정 1일·연구실 1주). 한 사이트 실패는 격리되어
+`data/dead_letter.log`에 기록된다.
+```bash
+PYTHONPATH=src python -m sejong_rag.cli schedule --run-now   # 초기 1회 적재 후 주기 시작
 ```
 
 ## 수집 점검 (사이트와 대조)
@@ -49,6 +57,7 @@ PYTHONPATH=src python -m sejong_rag.cli inspect --site bigyogwa --from-store
 ```bash
 PYTHONPATH=src python -m sejong_rag.cli ask --query "지금 신청 가능한 비교과 알려줘"
 PYTHONPATH=src python -m sejong_rag.cli ask --query "연구실 추천해줘"   # 관심사 되묻기
+PYTHONPATH=src python -m sejong_rag.cli ask --hybrid --query "신입생 멘토링 신청기간"  # v2 BM25+RRF
 ```
 - 질의 의도를 분류하고(비교과/학사일정/연구실), "지금"·"이번 주" 같은 표현과 학년/전공을 **하드 필터**로 변환해 검색한 뒤, 검색 자료만 근거로 출처를 인용해 답한다.
 - 정보를 못 찾으면 환각 대신 "없음"으로 답하고, 모호하면 한 가지만 되묻는다.
@@ -76,6 +85,8 @@ src/sejong_rag/
   time_utils.py    # KST, epoch-day, 한국어 상대날짜 해석("이번 주" 등)
   ingest/
     http_fetcher.py     # httpx 정적 fetch/post + 원본 캐시 + 정중한 지연
+    pipeline.py         # 사이트별 ETL 실행(CLI·스케줄러 공용) + dead-letter
+    scheduler.py        # APScheduler 도메인별 주기 크롤
     sites/bigyogwa.py   # 비교과 목록 파서 + crawl 러너
     sites/calendar.py   # 학사일정(공개 페이지) 파서
     sites/labs.py       # 연구실/교수(공개 API) 파서 — AI융합대학
@@ -91,7 +102,8 @@ src/sejong_rag/
   retrieve/
     retriever.py   # Retriever 인터페이스 + RetrievalFilter (Vector↔Hybrid 교체 지점)
     vector.py      # VectorRetriever(v1) — OpenAI dense + 하드필터
-    filters.py     # RetrievalFilter → Chroma where + 메타데이터 투영
+    hybrid.py · bm25.py · tokenize.py  # v2 하이브리드(BM25+RRF, 키위 선택)
+    filters.py     # RetrievalFilter → Chroma where / 파이썬 술어 + 메타데이터 투영
     router.py      # 의도 분류 + 시간/자격 필터 추출(결정론)
   agent/
     orchestrator.py # 라우팅→되묻기→검색→근거 기반 생성(+ SSE용 run_stream)
@@ -117,7 +129,7 @@ eval/
 - [x] **Phase 2** — Vector RAG + 클라리피케이션. 의도 라우팅·하드필터·되묻기·근거 기반 생성·abstention. 결정론 부분 테스트 완료(LLM 생성은 키 필요).
 - [x] **Phase 3** — 학사일정(공개 페이지)·연구실(공개 API, AI융합대학 12개 학과 190명) 수집. 세 도메인 모두 동일 ETL·검색 골격 재사용.
 - [x] **Phase 4** — FastAPI `/chat` SSE 스트리밍 + 세션, Next.js/React 챗 UI(스트리밍·출처 카드·프로필 패널).
-- [ ] Phase 5 — 지속 운영 + (조건부) 하이브리드
+- [x] **Phase 5** — 지속 운영(APScheduler 주기 크롤·dead-letter) + 하이브리드 검색 v2(BM25+RRF, drop-in).
 
 ## 테스트 현황
-69개 통과: 위 항목 + FastAPI `/chat`(SSE 이벤트 순서·세션 지속·프로필 추출).
+80개 통과: 위 항목 + 스케줄러/파이프라인(장애 격리)·하이브리드(BM25·RRF·필터 술어).

@@ -141,7 +141,7 @@
 | **Phase 2** | Vector 검색 + 대화형 되묻기 | 비교과 Q&A 완성, 수동 채점으로 검색 품질 측정 |
 | **Phase 3** | 학사일정·연구실 확장 | 같은 ETL·검색 골격 재사용(연구실은 AI융합대학부터) |
 | **Phase 4** | FastAPI + Next.js 통합 UI | 라우터·도구를 묶어 end-to-end 서비스화 |
-| **Phase 5** | 지속 운영 + (필요 시) 하이브리드 검색 | 주기 크롤·운영 안정화, 측정 기반 검색 고도화 |
+| **Phase 5** | 지속 운영 + 하이브리드 검색 | 주기 크롤·dead-letter, BM25+RRF(v2) drop-in |
 
 비교과를 1순위로 둔 이유는, 시점 필터·자격 필터·되묻기·변경감지 같은 어려운 요소가 모두
 모여 있어 여기서 패턴을 검증해두면 나머지 두 도메인은 재사용으로 풀리기 때문이다.
@@ -150,24 +150,26 @@
 
 ## 현재 진행 상황
 
-**Phase 0 ~ 4 완료** (테스트 69개 통과).
+**Phase 0 ~ 5 완료** (테스트 80개 통과).
 
 동작하는 것:
 - **세 도메인 수집**: 비교과(두드림), 학사일정(공개 페이지), 연구실(공개 교수 API,
   인공지능융합대학 12개 학과 190명·연구분야·연구실 홈페이지)까지 동일 ETL로 적재.
 - SQLite 진실 원천(변경분류·소프트삭제·실행 이력), Chroma·OpenAI 어댑터. 멱등·증분.
+  **APScheduler로 도메인별 주기 크롤**(실패 격리 + dead-letter).
 - **질의 처리**: 의도 분류(비교과/학사일정/연구실) → "지금"·"이번 주"·학년/전공을
   하드 필터로 변환 → 벡터 검색 → 검색 자료만 근거로 출처 인용 답변. 정보 없으면 환각 대신
-  "없음"으로 답하고, 모호하면 한 가지만 되묻는다.
+  "없음"으로 답하고, 모호하면 한 가지만 되묻는다. 검색은 **v1 Vector ↔ v2 Hybrid(BM25+RRF)
+  drop-in 교체**(인터페이스 동일).
 - **웹 서비스**: FastAPI `/chat`(SSE 토큰 스트리밍 + 세션) + Next.js/React 챗 UI
-  (실시간 답변·출처 카드·프로필 패널). `crawl`/`inspect`/`ask` CLI와 수동 채점 덤프도 제공.
+  (실시간 답변·출처 카드·프로필 패널). `crawl`/`inspect`/`ask`/`schedule` CLI와 수동 채점 덤프도 제공.
 
 정직한 제약(다음 단계에서 해소):
 - 두드림이 JS SPA라 현재 정적 수집은 첫 묶음(약 7~8건)만 가져온다. 전체 목록·상세 본문·
   자격(학년/전공) 정밀 추출은 Playwright 도입 후 채워진다(현재 자격은 "전체"로 가정).
 - LLM 답변 생성·임베딩 호출은 API 키가 있어야 동작(결정론 로직은 키 없이 테스트됨).
-- API 서버·프론트엔드(Phase 4)는 로드맵 단계. 검색은 v1 Vector이며, 수동 채점 결과에 따라
-  동일 인터페이스로 하이브리드(v2) 전환.
+- 검색은 기본 v1 Vector, v2 Hybrid(BM25+RRF)는 `--hybrid` 플래그로 사용 가능. 어느 쪽을
+  기본값으로 둘지는 수동 채점 결과로 결정(동일 인터페이스라 교체만 하면 됨).
 
 자세한 실행/구조는 [`backend/README.md`](backend/README.md) 참고.
 
@@ -215,12 +217,12 @@ cd frontend && npm install && npm run dev
 │  │  ├─ ingest/        # 크롤러(httpx) · 사이트별 파서(비교과·학사일정·연구실)
 │  │  ├─ normalize/     # 인코딩·정규화 · 변경감지(dedup) · 청킹
 │  │  ├─ index/         # SQLite 저장소 · Chroma · OpenAI 임베딩 · 멱등 ETL
-│  │  ├─ retrieve/      # Retriever 인터페이스 · VectorRetriever · 시간/자격 필터 · 라우터
+│  │  ├─ retrieve/      # Retriever 인터페이스 · Vector(v1) · Hybrid(BM25+RRF, v2) · 필터 · 라우터
 │  │  ├─ agent/         # 오케스트레이터 · 되묻기/프로필 · 프롬프트 · LLM 래퍼
 │  │  ├─ api/           # FastAPI /chat (SSE) · 세션 · CORS
-│  │  └─ report.py · cli.py                       # 검수 리포트 / CLI(crawl·inspect·ask)
+│  │  └─ report.py · cli.py        # 검수 리포트 / CLI(crawl·inspect·ask·schedule)
 │  ├─ eval/             # 골든 질의 + 수동 채점 덤프
-│  └─ tests/            # 파서·ETL·필터·라우터·오케스트레이터·API 등 69개
+│  └─ tests/            # 파서·ETL·필터·라우터·오케스트레이터·API·스케줄러·하이브리드 등 80개
 └─ frontend/                     # Next.js + React (채팅 UI, SSE 클라이언트)
    ├─ app/ (page.tsx · layout · globals.css) · components/SourceCard · lib/api.ts
 ```
