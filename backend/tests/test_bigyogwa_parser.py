@@ -5,7 +5,13 @@ from pathlib import Path
 
 import pytest
 
-from sejong_rag.ingest.sites.bigyogwa import parse_detail, parse_list
+from sejong_rag.ingest.sites.bigyogwa import (
+    crawl,
+    list_page_url,
+    parse_detail,
+    parse_eligibility,
+    parse_list,
+)
 
 FIXTURE = Path(__file__).parent / "fixtures" / "bigyogwa_list.html"
 DETAIL_FIXTURE = Path(__file__).parent / "fixtures" / "bigyogwa_detail_4253.html"
@@ -59,3 +65,65 @@ def test_stable_id_deterministic():
     b = _parse()
     assert [p.id for p in a] == [p.id for p in b]
     assert len({p.id for p in a}) == 8  # 중복 없음
+
+
+# --------------------------------------------------------------------------- #
+# 페이지네이션 — 경로 세그먼트(/list/all/1/{page}), 정적 fetch로 동작
+# --------------------------------------------------------------------------- #
+def test_list_page_url_is_path_based():
+    assert list_page_url(2) == "https://do.sejong.ac.kr/ko/program/all/list/all/1/2"
+    assert "?page=" not in list_page_url(2)  # 과거 잘못된 쿼리 방식이 아님
+
+
+class _FakeFetcher:
+    """page1만 카드 제공, 이후는 빈 목록 → 종료조건(2연속 빈 페이지) 검증용."""
+
+    def __init__(self, list_html: str):
+        self.list_html = list_html
+        self.list_calls: list[str] = []
+
+    def fetch(self, url: str, *, site: str, cache_key: str | None = None) -> str:
+        if "/list/" in url:
+            self.list_calls.append(url)
+            return self.list_html if url.endswith("/1") else "<ul class='columns-5'></ul>"
+        return ""  # 상세 없음(with_detail=False로 호출)
+
+
+def test_crawl_paginates_until_empty():
+    f = _FakeFetcher(FIXTURE.read_text(encoding="utf-8"))
+    progs = crawl(f, crawled_at="2026-06-17T00:00:00+09:00", with_detail=False)
+    assert len(progs) == 8  # page1의 8개 고유 프로그램
+    # page1(신규) → page2(빈) → page3(빈, 2연속) 후 종료. 무한 요청하지 않음
+    assert f.list_calls[0].endswith("/1")
+    assert len(f.list_calls) <= 4
+
+
+def test_crawl_respects_explicit_max_pages():
+    f = _FakeFetcher(FIXTURE.read_text(encoding="utf-8"))
+    crawl(f, crawled_at="2026-06-17T00:00:00+09:00", max_pages=1, with_detail=False)
+    assert len(f.list_calls) == 1  # 정수 지정 시 정확히 N페이지만
+
+
+# --------------------------------------------------------------------------- #
+# 자격(학년/전공) 추출 — 확신 높은 패턴만, 불확실하면 전체(빈값)
+# --------------------------------------------------------------------------- #
+def test_eligibility_freshman_only():
+    el = parse_eligibility("○ 참여 대상 • 세종대학교 신입생 (재학생, 대학원생 참여 불가) ○ 운영방식")
+    assert el["grade"] == [1]
+
+
+def test_eligibility_grade_and_major_from_fixture():
+    desc = parse_detail(DETAIL_FIXTURE.read_text(encoding="utf-8"))
+    el = parse_eligibility(desc)
+    assert el["grade"] == [1]
+    assert "자유전공학부" in el["major"]
+
+
+def test_eligibility_any_grade_marker_means_all():
+    el = parse_eligibility("참여 대상 : 전공 고민이 많은 재학, 휴학생 (학년무관) 상담 방법")
+    assert el["grade"] == []  # '학년무관' → 전체
+
+
+def test_eligibility_no_target_section_is_empty():
+    el = parse_eligibility("이 프로그램은 유익합니다. 많은 신청 바랍니다.")
+    assert el["grade"] == [] and el["major"] == [] and el["note"] == ""
