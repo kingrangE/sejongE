@@ -39,8 +39,8 @@ def _to_date(y: str, m: str, d: str) -> date:
     return date(int(y), int(m), int(d))
 
 
-def crawl(fetcher, crawled_at: str, max_pages: int = 1) -> list[BigyogwaProgram]:
-    """목록 페이지를 정적으로 가져와 파싱. id 기준 중복 제거.
+def crawl(fetcher, crawled_at: str, max_pages: int = 1, with_detail: bool = True) -> list[BigyogwaProgram]:
+    """목록을 가져와 파싱하고, 각 프로그램 상세의 설명 본문까지 보강한다.
 
     주의: ?page= 페이지네이션은 JS 구동이라 정적 fetch는 첫 묶음만 반환한다.
     전체 수집은 playwright_fetcher 도입 후 max_pages를 늘려 사용.
@@ -50,7 +50,19 @@ def crawl(fetcher, crawled_at: str, max_pages: int = 1) -> list[BigyogwaProgram]
         html = fetcher.fetch(list_page_url(page), site="bigyogwa", cache_key=f"list_p{page}")
         for prog in parse_list(html, crawled_at):
             by_id[prog.id] = prog
-    return list(by_id.values())
+    programs = list(by_id.values())
+
+    if with_detail:
+        for p in programs:
+            try:
+                dhtml = fetcher.fetch(p.source_url, site="bigyogwa", cache_key=f"view_{p.id}")
+                desc = parse_detail(dhtml)
+                if desc:
+                    p.description = desc
+                    _finalize(p)  # 설명 반영해 embedding_text·content_hash 갱신
+            except Exception:
+                continue  # 상세 실패는 목록 정보로 진행(장애 격리)
+    return programs
 
 
 def parse_list(html: str, crawled_at: str, base_url: str = BASE_URL) -> list[BigyogwaProgram]:
@@ -102,47 +114,69 @@ def parse_list(html: str, crawled_at: str, base_url: str = BASE_URL) -> list[Big
         if mm:
             mileage = int(mm.group(1))
 
-        embedding_text = _embedding_text(title, organizer, ptype, apply_start, apply_end, event_start, event_end)
-        chash = content_hash(
-            "|".join(
-                str(x)
-                for x in [title, organizer, apply_start, apply_end, event_start, event_end, applied, capacity, mileage]
-            )
+        prog = BigyogwaProgram(
+            id=stable_id(detail_url),
+            source_url=detail_url,
+            source_site="bigyogwa",
+            crawled_at=crawled_at,
+            content_hash="",
+            program_name=title,
+            organizer=organizer,
+            apply_start=apply_start,
+            apply_end=apply_end,
+            apply_start_epoch=epoch_day(apply_start) if apply_start else None,
+            apply_end_epoch=epoch_day(apply_end) if apply_end else None,
+            event_start=event_start,
+            event_end=event_end,
+            capacity=capacity,
+            applied_count=applied,
+            mileage=mileage,
+            eligibility_note=f"참여형태: {ptype}" if ptype else "",
+            apply_url=detail_url,
         )
-
-        programs.append(
-            BigyogwaProgram(
-                id=stable_id(detail_url),
-                source_url=detail_url,
-                source_site="bigyogwa",
-                crawled_at=crawled_at,
-                content_hash=chash,
-                text=embedding_text,
-                embedding_text=embedding_text,
-                program_name=title,
-                organizer=organizer,
-                apply_start=apply_start,
-                apply_end=apply_end,
-                apply_start_epoch=epoch_day(apply_start) if apply_start else None,
-                apply_end_epoch=epoch_day(apply_end) if apply_end else None,
-                event_start=event_start,
-                event_end=event_end,
-                capacity=capacity,
-                applied_count=applied,
-                mileage=mileage,
-                eligibility_note=f"참여형태: {ptype}" if ptype else "",
-                apply_url=detail_url,
-            )
-        )
+        programs.append(_finalize(prog))
     return programs
 
 
-def _embedding_text(title, organizer, ptype, a_s, a_e, e_s, e_e) -> str:
-    lines = [title, f"운영기관: {organizer}"]
-    if ptype:
-        lines.append(f"참여형태: {ptype}")
-    if a_s and a_e:
-        lines.append(f"신청기간: {a_s} ~ {a_e}")
-    if e_s and e_e:
-        lines.append(f"운영기간: {e_s} ~ {e_e}")
+def parse_detail(html: str) -> str:
+    """상세 페이지에서 설명 본문(div.description) 추출. 정적 HTML에 존재."""
+    soup = BeautifulSoup(html, "lxml")
+    el = soup.select_one("div.description")
+    if not el:
+        return ""
+    return re.sub(r"\s+", " ", el.get_text(" ", strip=True)).strip()
+
+
+def _embedding_text(p: BigyogwaProgram) -> str:
+    lines = [p.program_name, f"운영기관: {p.organizer}"]
+    if p.eligibility_note:
+        lines.append(p.eligibility_note)
+    if p.apply_start and p.apply_end:
+        lines.append(f"신청기간: {p.apply_start} ~ {p.apply_end}")
+    if p.event_start and p.event_end:
+        lines.append(f"운영기간: {p.event_start} ~ {p.event_end}")
+    if p.mileage:
+        lines.append(f"마일리지: {p.mileage}점")
+    if p.description:
+        lines.append("\n" + p.description)
     return "\n".join(lines)
+
+
+def _content_hash(p: BigyogwaProgram) -> str:
+    return content_hash(
+        "|".join(
+            str(x)
+            for x in [
+                p.program_name, p.organizer, p.apply_start, p.apply_end,
+                p.event_start, p.event_end, p.applied_count, p.capacity, p.mileage, p.description,
+            ]
+        )
+    )
+
+
+def _finalize(p: BigyogwaProgram) -> BigyogwaProgram:
+    """현재 필드(설명 포함)로 embedding_text·text·content_hash를 확정."""
+    p.embedding_text = _embedding_text(p)
+    p.text = p.embedding_text
+    p.content_hash = _content_hash(p)
+    return p

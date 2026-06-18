@@ -35,6 +35,7 @@ class Intent(str, Enum):
     LAB = "lab"
     CALENDAR = "calendar"
     BIGYOGWA = "bigyogwa"
+    GENERAL = "general"  # 도메인 키워드 없는 내용 질문 → 전 도메인 통합 검색
     CLARIFY = "clarify"
     SMALLTALK = "smalltalk"
 
@@ -116,6 +117,7 @@ class BigyogwaProgram(BaseDoc):
     doc_type: DocType = DocType.BIGYOGWA
     program_name: str = ""
     organizer: str = ""
+    description: str = ""  # 상세 페이지 설명 본문(무엇을 하는 프로그램인지)
     category: str = ""  # 취업/어학/멘토링/특강/공모전
     apply_start: date | None = None
     apply_end: date | None = None

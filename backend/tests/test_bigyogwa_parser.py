@@ -5,9 +5,10 @@ from pathlib import Path
 
 import pytest
 
-from sejong_rag.ingest.sites.bigyogwa import parse_list
+from sejong_rag.ingest.sites.bigyogwa import parse_detail, parse_list
 
 FIXTURE = Path(__file__).parent / "fixtures" / "bigyogwa_list.html"
+DETAIL_FIXTURE = Path(__file__).parent / "fixtures" / "bigyogwa_detail_4253.html"
 
 pytestmark = pytest.mark.skipif(not FIXTURE.exists(), reason="픽스처 없음")
 
@@ -44,6 +45,13 @@ def test_capacity_parsed():
     # 무제한 케이스는 capacity=None, applied 존재
     unlimited = [p for p in progs if p.applied_count is not None and p.capacity is None]
     assert unlimited  # "/무제한" 케이스 존재
+
+
+@pytest.mark.skipif(not DETAIL_FIXTURE.exists(), reason="상세 픽스처 없음")
+def test_parse_detail_description():
+    desc = parse_detail(DETAIL_FIXTURE.read_text(encoding="utf-8"))
+    assert len(desc) > 50
+    assert "영상" in desc  # 실제 설명 본문이 추출됨
 
 
 def test_stable_id_deterministic():

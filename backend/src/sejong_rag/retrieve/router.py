@@ -23,6 +23,10 @@ _OPEN_CUES = ("지금", "현재", "신청 가능", "신청가능", "접수중", 
 _GRADE_CUE = re.compile(r"(\d)\s*학년")
 _MY_CUE = ("내가", "제가", "나에게", "저에게", "내", "제")
 
+# 인사/잡담/메타 — 검색 없이 안내로 응대
+_GREETING = ("안녕", "반가", "하이", "ㅎㅇ", "고마", "감사", "잘가", "잘 가", "바이",
+             "누구야", "누구니", "뭐야 너", "뭐할", "뭐 할", "도움말", "사용법", "테스트")
+
 
 @dataclass
 class Routed:
@@ -30,6 +34,11 @@ class Routed:
     filters: RetrievalFilter
     needs_open: bool
     as_of: date
+
+
+def _is_greeting(query: str) -> bool:
+    q = query.replace(" ", "")
+    return any(g.replace(" ", "") in q for g in _GREETING)
 
 
 def classify_intent(query: str) -> Intent:
@@ -40,7 +49,10 @@ def classify_intent(query: str) -> Intent:
         Intent.CALENDAR: sum(k.replace(" ", "") in q for k in _CALENDAR_KW),
     }
     best = max(scores, key=lambda k: scores[k])
-    return best if scores[best] > 0 else Intent.SMALLTALK
+    if scores[best] > 0:
+        return best
+    # 도메인 키워드가 없으면: 인사/잡담은 SMALLTALK, 그 외 내용 질문은 전 도메인 통합 검색
+    return Intent.SMALLTALK if _is_greeting(query) else Intent.GENERAL
 
 
 def route(query: str, profile: ConversationProfile | None = None, as_of: date | None = None) -> Routed:
