@@ -1,16 +1,13 @@
-"""의존성 — orchestrator/세션 스토어 싱글톤. 테스트는 dependency_overrides로 교체."""
+"""의존성 — orchestrator 싱글톤. 테스트는 dependency_overrides로 교체.
+
+프로필은 클라이언트가 보관하므로(방법 A) 서버 세션 스토어는 두지 않는다(무상태).
+"""
 
 from __future__ import annotations
 
 from functools import lru_cache
 
 from sejong_rag.agent.orchestrator import Orchestrator
-from sejong_rag.api.session import SessionStore
-
-
-@lru_cache
-def get_session_store() -> SessionStore:
-    return SessionStore()
 
 
 @lru_cache

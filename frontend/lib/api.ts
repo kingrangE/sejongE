@@ -20,7 +20,6 @@ export interface Profile {
 }
 
 export interface ChatHandlers {
-  onSession?: (sessionId: string) => void;
   onMeta?: (intent: string) => void;
   onDelta?: (token: string) => void;
   onClarify?: (text: string) => void;
@@ -32,13 +31,14 @@ export interface ChatHandlers {
 
 export async function streamChat(
   message: string,
-  sessionId: string | null,
+  profile: Profile,
   handlers: ChatHandlers,
 ): Promise<void> {
+  // 프로필은 클라이언트가 보관(localStorage)하고 매 요청에 동봉 → 백엔드 무상태.
   const res = await fetch(`${API_BASE}/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message, session_id: sessionId }),
+    body: JSON.stringify({ message, profile }),
   });
   if (!res.ok || !res.body) {
     throw new Error(`chat 요청 실패: ${res.status}`);
@@ -71,9 +71,6 @@ function dispatch(block: string, h: ChatHandlers): void {
   }
   const parsed = data ? JSON.parse(data) : null;
   switch (event) {
-    case "session":
-      h.onSession?.(parsed.session_id);
-      break;
     case "meta":
       h.onMeta?.(parsed.intent);
       break;

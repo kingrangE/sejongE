@@ -28,6 +28,7 @@ lib/
 
 ## 동작
 한 번의 질문에 대해 백엔드가 SSE 이벤트를 순서대로 흘려보낸다:
-`session → meta(의도) → (clarify | abstain | sources + delta 토큰 스트림) → profile → done`.
+`meta(의도) → (clarify | abstain | sources + delta 토큰 스트림) → profile → done`.
 - 답변은 토큰 단위로 실시간 출력되고, 근거 출처는 카드로 표시된다.
-- 학년/전공/관심사는 대화 중 자동 추출되어 우측 프로필 패널에 반영된다(로그인 없음).
+- 학년/전공/관심사는 우측 패널에서 직접 편집하거나 대화 중 자동 추출되며, **브라우저(localStorage)에
+  저장되어 매 요청에 동봉**된다(로그인 없음, 백엔드 무상태 → 사용자 간 충돌 없음).

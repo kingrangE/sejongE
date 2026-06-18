@@ -59,6 +59,13 @@ body {
 .panel h3 { margin: 0 0 10px; font-size: 14px; }
 .panel .row { font-size: 13px; color: #4a4a4f; margin: 6px 0; }
 .panel .row b { color: #1d1d1f; }
+.panel .field { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; font-size: 13px; }
+.panel .field > span { color: #6b6b70; }
+.panel .field select, .panel .field input { padding: 7px 8px; border: 1px solid var(--line); border-radius: 7px; font-size: 13px; }
+.panel .field select:focus, .panel .field input:focus { outline: none; border-color: var(--accent); }
+.panel .clear-btn { margin-top: 6px; width: 100%; padding: 6px; font-size: 12px; color: #6b6b70;
+  background: #fafafa; border: 1px solid var(--line); border-radius: 7px; cursor: pointer; }
+.panel .clear-btn:hover { color: var(--accent); border-color: var(--accent); }
 .panel .hint { font-size: 12px; color: #8a8a8e; margin-top: 12px; line-height: 1.5; }
 .examples { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
 .examples button { text-align: left; font-size: 12px; padding: 6px 8px; border: 1px solid var(--line);

@@ -1,4 +1,4 @@
-"""FastAPI /chat SSE 엔드포인트 — 가짜 orchestrator 주입(키 불필요)."""
+"""FastAPI /chat SSE 엔드포인트 — 무상태(프로필은 요청에 동봉). 가짜 orchestrator 주입."""
 
 import json
 
@@ -6,9 +6,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from sejong_rag.agent.orchestrator import Orchestrator
-from sejong_rag.api.deps import get_orchestrator, get_session_store
+from sejong_rag.api.deps import get_orchestrator
 from sejong_rag.api.main import app
-from sejong_rag.api.session import SessionStore
 from sejong_rag.models import Candidate, DocType
 from sejong_rag.retrieve.retriever import RetrievalFilter, Retriever
 
@@ -37,9 +36,7 @@ def _cand():
 
 def _client(results):
     orch = Orchestrator(FakeRetriever(results), FakeLLM())
-    store = SessionStore()
     app.dependency_overrides[get_orchestrator] = lambda: orch
-    app.dependency_overrides[get_session_store] = lambda: store
     return TestClient(app)
 
 
@@ -70,24 +67,17 @@ def test_health():
 def test_chat_answer_streams_sources_and_deltas():
     r = _client([_cand()]).post("/chat", json={"message": "지금 신청 가능한 비교과 알려줘"})
     assert r.status_code == 200
-    events = _parse_sse(r.text)
-    names = [e for e, _ in events]
-    assert names[0] == "session"
-    assert "sources" in names
-    assert "delta" in names
+    names = [e for e, _ in _parse_sse(r.text)]
+    assert "sources" in names and "delta" in names
     assert names[-1] == "done"
-    # 스트리밍된 토큰을 합치면 답변이 됨
-    text = "".join(d for e, d in [(e, d.get("text") if isinstance(d, dict) else d) for e, d in events] if e == "delta")
-    # delta data는 문자열 토큰
-    deltas = "".join(d for e, d in events if e == "delta")
+    deltas = "".join(d for e, d in _parse_sse(r.text) if e == "delta")
     assert "[1]" in deltas
 
 
 def test_chat_clarify_for_vague_lab():
-    events = _parse_sse(_client([_cand()]).post("/chat", json={"message": "연구실 추천해줘"}).text)
-    names = [e for e, _ in events]
+    names = [e for e, _ in _parse_sse(_client([_cand()]).post("/chat", json={"message": "연구실 추천해줘"}).text)]
     assert "clarify" in names
-    assert "sources" not in names  # 되묻기 단계에선 검색 안 함
+    assert "sources" not in names
 
 
 def test_chat_smalltalk_abstains():
@@ -95,20 +85,22 @@ def test_chat_smalltalk_abstains():
     assert any(e == "abstain" for e, _ in events)
 
 
-def test_session_id_issued_and_reused():
-    client = _client([_cand()])
-    ev1 = _parse_sse(client.post("/chat", json={"message": "안녕?"}).text)
-    sid = next(d["session_id"] for e, d in ev1 if e == "session")
-    assert sid
-    ev2 = _parse_sse(client.post("/chat", json={"message": "안녕?", "session_id": sid}).text)
-    sid2 = next(d["session_id"] for e, d in ev2 if e == "session")
-    assert sid2 == sid
+def test_profile_from_request_is_used_and_returned():
+    # 클라이언트가 보낸 프로필이 응답 profile 이벤트에 유지됨(무상태)
+    body = {"message": "지금 신청 가능한 비교과", "profile": {"grade": 2, "major": "컴퓨터공학과", "interests": [], "asked_fields": []}}
+    events = _parse_sse(_client([_cand()]).post("/chat", json=body).text)
+    prof = next(d for e, d in events if e == "profile")
+    assert prof["grade"] == 2 and prof["major"] == "컴퓨터공학과"
 
 
-def test_profile_persists_across_requests():
-    client = _client([_cand()])
-    ev1 = _parse_sse(client.post("/chat", json={"message": "저는 컴공 3학년이에요"}).text)
-    sid = next(d["session_id"] for e, d in ev1 if e == "session")
-    prof = next(d for e, d in ev1 if e == "profile")
-    assert prof["grade"] == 3
-    assert prof["major"] == "컴퓨터공학과"
+def test_profile_extracted_from_message_merges():
+    body = {"message": "저는 컴공 3학년이에요. 지금 신청 가능한 비교과 알려줘"}
+    events = _parse_sse(_client([_cand()]).post("/chat", json=body).text)
+    prof = next(d for e, d in events if e == "profile")
+    assert prof["grade"] == 3 and prof["major"] == "컴퓨터공학과"
+
+
+def test_no_profile_defaults_empty():
+    events = _parse_sse(_client([_cand()]).post("/chat", json={"message": "안녕?"}).text)
+    prof = next(d for e, d in events if e == "profile")
+    assert prof["grade"] is None

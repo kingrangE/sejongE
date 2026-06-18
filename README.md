@@ -26,7 +26,7 @@
  ┌────────────────────┐   ┌──────────────┐   ┌────────────────┐   ┌──────────────┐
  │ 비교과 / 학사일정 /  │   │ SQLite        │   │ Retriever      │   │ FastAPI      │
  │ 공지 / 학과·교수     │──▶│ (진실 원천)    │──▶│  (Vector→Hybrid)│──▶│  /chat (SSE) │
- │  httpx · Playwright │   │ Chroma        │   │ + 시간/자격     │   │ + 세션       │
+ │  httpx · Playwright │   │ Chroma        │   │ + 시간/자격     │   │ (무상태)     │
  │  변경감지 · 멱등     │   │ (벡터 + 메타)  │   │   하드 필터     │   │              │
  └────────────────────┘   └──────────────┘   └───────┬────────┘   └──────┬───────┘
         ▲ APScheduler                                 │ tool use          │
@@ -121,7 +121,7 @@
 | 크롤 | httpx + BeautifulSoup / Playwright | 정적 우선, JS 사이트는 헤드리스 브라우저로 폴백 |
 | 스케줄 | APScheduler | 순수 파이썬, 도메인별 주기 크롤 |
 | 저장 | SQLite | 진실 원천. 변경감지·소프트삭제·실행 이력 |
-| 백엔드 | FastAPI (SSE 스트리밍) | 챗 엔드포인트·세션 |
+| 백엔드 | FastAPI (SSE 스트리밍) | 챗 엔드포인트(무상태; 프로필은 요청에 동봉) |
 | 프론트 | Next.js + React | 채팅 UI·출처 카드·프로필 패널 |
 | 검증 | pydantic v2 | 모든 외부 입력/문서를 스키마로 강제 |
 
@@ -161,8 +161,9 @@
   하드 필터로 변환 → 벡터 검색 → 검색 자료만 근거로 출처 인용 답변. 정보 없으면 환각 대신
   "없음"으로 답하고, 모호하면 한 가지만 되묻는다. 검색은 **v1 Vector ↔ v2 Hybrid(BM25+RRF)
   drop-in 교체**(인터페이스 동일).
-- **웹 서비스**: FastAPI `/chat`(SSE 토큰 스트리밍 + 세션) + Next.js/React 챗 UI
-  (실시간 답변·출처 카드·프로필 패널). `crawl`/`inspect`/`ask`/`schedule` CLI와 수동 채점 덤프도 제공.
+- **웹 서비스**: FastAPI `/chat`(SSE 토큰 스트리밍, **무상태**) + Next.js/React 챗 UI
+  (실시간 답변·출처 카드·**편집 가능 프로필 패널**, 프로필은 브라우저 localStorage 보관 →
+  사용자 간 충돌 없음). `crawl`/`inspect`/`ask`/`schedule` CLI와 수동 채점 덤프도 제공.
 
 정직한 제약(다음 단계에서 해소):
 - 두드림이 JS SPA라 현재 정적 수집은 첫 묶음(약 7~8건)만 가져온다. 전체 목록·상세 본문·
@@ -219,7 +220,7 @@ cd frontend && npm install && npm run dev
 │  │  ├─ index/         # SQLite 저장소 · Chroma · OpenAI 임베딩 · 멱등 ETL
 │  │  ├─ retrieve/      # Retriever 인터페이스 · Vector(v1) · Hybrid(BM25+RRF, v2) · 필터 · 라우터
 │  │  ├─ agent/         # 오케스트레이터 · 되묻기/프로필 · 프롬프트 · LLM 래퍼
-│  │  ├─ api/           # FastAPI /chat (SSE) · 세션 · CORS
+│  │  ├─ api/           # FastAPI /chat (SSE, 무상태) · CORS
 │  │  └─ report.py · cli.py        # 검수 리포트 / CLI(crawl·inspect·ask·schedule)
 │  ├─ eval/             # 골든 질의 + 수동 채점 덤프
 │  └─ tests/            # 파서·ETL·필터·라우터·오케스트레이터·API·스케줄러·하이브리드 등 80개

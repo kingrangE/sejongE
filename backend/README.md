@@ -72,8 +72,9 @@ PYTHONPATH=src python eval/dump_answers.py        # → data/eval_report.md
 ## API 서버 (FastAPI + SSE)
 ```bash
 PYTHONPATH=src uvicorn sejong_rag.api.main:app --port 8000
-# POST /chat {message, session_id?} → text/event-stream
-#   session → meta → (clarify | abstain | sources + delta*) → profile → done
+# POST /chat {message, profile?} → text/event-stream
+#   meta → (clarify | abstain | sources + delta*) → profile → done
+# 무상태: 프로필은 클라이언트(localStorage)가 보관·전송, 서버는 추출값을 머지해 돌려줌
 ```
 프론트엔드(Next.js)는 `../frontend` 참고.
 
@@ -113,8 +114,7 @@ src/sejong_rag/
     factory.py      # 실제 의존성으로 Orchestrator 조립
   api/
     main.py         # FastAPI 앱(+CORS, /health)
-    routes_chat.py  # POST /chat — SSE 스트리밍
-    session.py      # session_id별 프로필 보관(메모리)
+    routes_chat.py  # POST /chat — SSE 스트리밍(무상태: 프로필을 요청에서 받음)
     deps.py · schemas.py
   report.py · cli.py   # 검수 리포트 / CLI(crawl·inspect·ask)
 eval/
@@ -128,7 +128,7 @@ eval/
   - ⚠️ 알려진 제약: 두드림은 JS SPA라 **정적 fetch는 첫 묶음(~8건)만** 수집. **전체 목록 페이지네이션·상세 본문·자격(학년/전공) 정밀추출은 Playwright 후속** 필요(현재 자격은 전체로 가정). 콘텐츠 유형별(table/image) 추출기도 상세 단계에서 추가.
 - [x] **Phase 2** — Vector RAG + 클라리피케이션. 의도 라우팅·하드필터·되묻기·근거 기반 생성·abstention. 결정론 부분 테스트 완료(LLM 생성은 키 필요).
 - [x] **Phase 3** — 학사일정(공개 페이지)·연구실(공개 API, AI융합대학 12개 학과 190명) 수집. 세 도메인 모두 동일 ETL·검색 골격 재사용.
-- [x] **Phase 4** — FastAPI `/chat` SSE 스트리밍 + 세션, Next.js/React 챗 UI(스트리밍·출처 카드·프로필 패널).
+- [x] **Phase 4** — FastAPI `/chat` SSE 스트리밍(무상태), Next.js/React 챗 UI(스트리밍·출처 카드·**편집 가능 프로필 패널**, localStorage 보관).
 - [x] **Phase 5** — 지속 운영(APScheduler 주기 크롤·dead-letter) + 하이브리드 검색 v2(BM25+RRF, drop-in).
 
 ## 테스트 현황
