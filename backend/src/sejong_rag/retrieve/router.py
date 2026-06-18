@@ -85,7 +85,8 @@ def route(query: str, profile: ConversationProfile | None = None, as_of: date | 
             needs_open = True
             f.only_open = True
             f.as_of_epoch = epoch_day(as_of)
-        # 학년/전공 자격은 데이터가 갖춰지면 활성화(현재 비교과 자격은 대부분 '전체')
+        # 자격 하드 필터: 학년은 메타데이터 플래그로 질의 시 필터링한다(filters.py).
+        # 전공은 표기 흔들림이 커 v1에선 하드필터하지 않고 랭킹에 맡긴다.
         if profile.grade is not None:
             f.grade = profile.grade
         if profile.major:
