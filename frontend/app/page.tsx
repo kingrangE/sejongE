@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import SourceCard from "@/components/SourceCard";
+import Markdown from "@/components/Markdown";
 import { streamChat, type Profile, type Source } from "@/lib/api";
 
 interface Message {
@@ -86,7 +87,11 @@ export default function Page() {
               {m.role === "assistant" && m.intent && (
                 <div className="intent">{INTENT_LABEL[m.intent] ?? m.intent}</div>
               )}
-              {m.text || (m.role === "assistant" && busy ? "…" : "")}
+              {m.text ? (
+                <Markdown>{m.text}</Markdown>
+              ) : (
+                m.role === "assistant" && busy && <span className="typing">…</span>
+              )}
               {m.sources && m.sources.length > 0 && (
                 <div className="sources">
                   {m.sources.map((s, i) => (
